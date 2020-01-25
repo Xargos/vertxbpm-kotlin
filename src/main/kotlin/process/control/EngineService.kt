@@ -55,7 +55,7 @@ class EngineService(
         val engineStart = Promise.promise<String>()
         println("Deploying Engine: $engineStart")
         val engineId = EngineId(nodeId.value + "_" + ulid.nextULID())
-        val workflowEngine = workflowEngineFactory.buildEngine()
+        val workflowEngine = workflowEngineFactory.buildEngine(engineId)
         val engineVerticle = EngineVerticle(
             engineId,
             workflowEngine,

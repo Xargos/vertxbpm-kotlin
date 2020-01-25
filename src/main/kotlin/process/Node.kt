@@ -57,7 +57,7 @@ fun main() {
 
 private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
     Ignition.start()
-    val igniteRepository = IgniteRepository("processes", Ignition.ignite())
+    val igniteRepository = IgniteRepository("processes", "engines", Ignition.ignite())
     val processQueryService = ProcessQueryService(igniteRepository)
     val workflowEngineFactory = WorkflowEngineFactory(igniteRepository)
     val ulid = ULID()

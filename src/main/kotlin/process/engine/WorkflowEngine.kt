@@ -7,13 +7,14 @@ import java.io.Serializable
 data class ProcessId(val value: String) : Serializable
 
 class WorkflowEngineFactory(private val repository: Repository) {
-    fun buildEngine(): WorkflowEngine {
-        return WorkflowEngine(repository)
+    fun buildEngine(engineId: EngineId): WorkflowEngine {
+        return WorkflowEngine(repository, engineId)
     }
 }
 
 class WorkflowEngine(
-    private val repository: Repository
+    private val repository: Repository,
+    private val engineId: EngineId
 ) {
 
     fun <T> start(
@@ -24,12 +25,12 @@ class WorkflowEngine(
     ) {
         val firstStep = StepContext(workflow.startNode(), inputData)
         val flowContext = FlowContext(workflow.name(), processId, firstStep, listOf(firstStep))
-        repository.retrieveProcess<T>(flowContext.processId)
+        repository.assignProcessToEngine(engineId, processId)
+            .compose { repository.retrieveProcess<T>(flowContext.processId) }
             .compose { this.execStep(workflow.steps(vertx), (it ?: flowContext)) }
+            .compose { repository.removeProcessFromEngine(engineId, processId) }
             .onFailure { it.printStackTrace() }
-            .onSuccess {
-                println("Success")
-            }
+            .onSuccess { println("Success") }
     }
 
     private fun <T> execStep(
