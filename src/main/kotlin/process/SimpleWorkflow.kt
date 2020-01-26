@@ -37,9 +37,9 @@ class SimpleWorkflow : Workflow<String> {
                 StepName("end")
             ) { data ->
                 println("Step")
-                if (Random.nextBoolean()) {
+//                if (Random.nextBoolean()) {
                     throw RuntimeException("Ble")
-                }
+//                }
                 Future.succeededFuture(data)
             },
             Step.End(StepName("end")) {

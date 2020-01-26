@@ -62,10 +62,9 @@ fun main() {
 
 private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
     val ulid = ULID()
-    val nodeId = NodeId(ulid.nextULID())
     Ignition.start()
     val igniteRepository = IgniteRepository(
-        globalCacheName = "global",
+        waitProcessesQueueName = "waitProcessesQueue",
         processesCacheName = "processes",
         enginesCacheName = "engines",
         nodesCacheName = "nodes",
@@ -79,12 +78,10 @@ private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): Control
         engineHealthCheckService = engineHealthCheckService,
         workflowEngineFactory = workflowEngineFactory,
         workflowStore = WorkflowStore(workflows),
-        nodeId = nodeId,
         ulid = ulid
     )
-    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository, nodeId)
+    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
     return ControlVerticle(
-        nodeId = nodeId,
         engineHealthCheckService = engineHealthCheckService,
         engineService = engineService,
         processQueryService = processQueryService,

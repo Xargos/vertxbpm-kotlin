@@ -38,8 +38,8 @@ class EngineHealthCheckService(private val repository: Repository) {
                 .join(healthyEngineIds.map { runHealthCheck(it.key, vertx.eventBus()) })
                 .onFailure {
                     cleanUpDeadEngines(vertx, nodeId)
-                        .compose { engineService.startEngines(vertx, engineNo - healthyEngineIds.size) }
-                        .compose { this.resumeStoppedProcesses(engineService, vertx.eventBus()) }
+                        .compose { engineService.startEngines(vertx, engineNo - healthyEngineIds.size, nodeId) }
+                        .compose { this.resumeStoppedProcesses(engineService, vertx.eventBus(), nodeId) }
                         .setHandler {
                             deadEngineIds.clear()
                         }
@@ -48,9 +48,9 @@ class EngineHealthCheckService(private val repository: Repository) {
         }
     }
 
-    private fun resumeStoppedProcesses(engineService: EngineService, eventBus: EventBus): Future<Void> {
+    private fun resumeStoppedProcesses(engineService: EngineService, eventBus: EventBus, nodeId: NodeId): Future<Void> {
         return repository.getActiveProcesses(deadEngineIds)
-            .compose { engineService.restartProcesses(it, eventBus) }
+            .compose { engineService.restartProcesses(it, eventBus, nodeId) }
     }
 
     private fun cleanUpDeadEngines(vertx: Vertx, nodeId: NodeId): Future<Void> {

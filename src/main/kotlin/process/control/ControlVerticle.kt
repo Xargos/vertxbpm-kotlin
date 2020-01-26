@@ -6,7 +6,6 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.EventBus
 import io.vertx.core.impl.VertxImpl
-import io.vertx.core.spi.cluster.NodeListener
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import java.io.Serializable
@@ -16,31 +15,24 @@ data class NodeId(val value: String) : Serializable
 
 data class Config(val engineNo: Int, val port: Int) : Serializable
 
-class NL : NodeListener {
-    override fun nodeAdded(nodeID: String?) {
-        println("node added $nodeID")
-    }
-
-    override fun nodeLeft(nodeID: String?) {
-        println("node left $nodeID")
-    }
-
-}
 
 class ControlVerticle(
-    private val nodeId: NodeId,
     private val engineHealthCheckService: EngineHealthCheckService,
     private val engineService: EngineService,
     private val processQueryService: ProcessQueryService,
     private val nodeSynchronizationService: NodeSynchronizationService,
     private val config: Config
 ) : AbstractVerticle() {
+
+    private lateinit var nodeId: NodeId
+
     override fun start(startPromise: Promise<Void>) {
-        CompositeFuture.join(startHttpServer(), engineService.startEngines(vertx, config.engineNo))
+        nodeId = NodeId((vertx as VertxImpl).nodeID)
+        CompositeFuture.join(startHttpServer(), engineService.startEngines(vertx, config.engineNo, nodeId))
             .onSuccess {
                 engineHealthCheckService.startHealthChecks(nodeId, vertx, config.engineNo, engineService)
-                nodeSynchronizationService.subscribeNodeExistence(vertx.eventBus())
-                nodeSynchronizationService.runNodeHealthCheck(vertx, engineService)
+                nodeSynchronizationService.subscribeNodeExistence(vertx)
+                nodeSynchronizationService.listenToWaitingProcesses(vertx, engineService, nodeId)
                 startPromise.complete()
             }
             .onFailure {
@@ -59,13 +51,10 @@ class ControlVerticle(
 
         router.route("/processes/:processId").handler(processQueryService::getProcess)
         router.route("/processes/").handler(processQueryService::getProcesses)
+        router.route("/deployments/").handler { it.response().end(vertx.deploymentIDs().toString()) }
         router.route("/engines/").handler(engineHealthCheckService::getHealthyEngineIds)
+        router.route("/engines/deploy").handler { engineService.startEngines(vertx, 2, nodeId) }
         router.route("/engines/:deploymentId").handler { engineService.undeployEngine(it, vertx) }
-        val v: VertxImpl = vertx as VertxImpl
-        v.clusterManager.nodeListener(NL())
-        router.route("/nodes/").handler {
-            it.response().end(v.clusterManager.nodes.toString())
-        }
         val serverStart = Promise.promise<Void>()
         server
             .requestHandler(router)
@@ -86,7 +75,7 @@ class ControlVerticle(
 
     private fun startProcess(it: RoutingContext, eventBus: EventBus) {
         val workflowName = it.pathParam("workflowName")
-        engineService.startProcess(workflowName, it.bodyAsString ?: "", eventBus)
+        engineService.startProcess(nodeId, workflowName, it.bodyAsString ?: "", eventBus)
             .setHandler { it1 ->
                 if (it1.failed()) {
                     it.fail(it1.cause())

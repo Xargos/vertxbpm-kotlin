@@ -29,61 +29,61 @@ class FirstSpec : Spek({
     val repository = mockk<Repository>()
 
     fun setup(buildControlVerticle: (workflows: Map<String, Workflow<Any>>) -> ControlVerticle) {
-
-        val workflows = mapOf(workflow.name() to (workflow as Workflow<Any>))
-
-        val clusterManager: ClusterManager = IgniteClusterManager()
-
-        val options = VertxOptions().setClusterManager(clusterManager)
-        Vertx.clusteredVertx(options) { res: AsyncResult<Vertx?> ->
-            if (res.succeeded()) {
-                val serverVerticle = buildControlVerticle(workflows)
-                res.result()?.deployVerticle(serverVerticle) {
-                    if (it.failed()) {
-                        println("Startup failed")
-                        it.cause().printStackTrace()
-                        exitProcess(-1)
-                    } else {
-                        println("Startup finished successfully")
-                    }
-                }
-            } else { // failed!
-                throw res.cause()
-            }
-        }
+//
+//        val workflows = mapOf(workflow.name() to (workflow as Workflow<Any>))
+//
+//        val clusterManager: ClusterManager = IgniteClusterManager()
+//
+//        val options = VertxOptions().setClusterManager(clusterManager)
+//        Vertx.clusteredVertx(options) { res: AsyncResult<Vertx?> ->
+//            if (res.succeeded()) {
+//                val serverVerticle = buildControlVerticle(workflows)
+//                res.result()?.deployVerticle(serverVerticle) {
+//                    if (it.failed()) {
+//                        println("Startup failed")
+//                        it.cause().printStackTrace()
+//                        exitProcess(-1)
+//                    } else {
+//                        println("Startup finished successfully")
+//                    }
+//                }
+//            } else { // failed!
+//                throw res.cause()
+//            }
+//        }
     }
 
-    fun buildTestControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
-        val ulid = ULID()
-        val nodeId = NodeId(ulid.nextULID())
-        val processQueryService = ProcessQueryService(repository)
-        val workflowEngineFactory = WorkflowEngineFactory(repository)
-        val config = Config(1, 8080)
-        val engineHealthCheckService = EngineHealthCheckService(repository)
-        val engineService = EngineService(
-            engineHealthCheckService = engineHealthCheckService,
-            workflowEngineFactory = workflowEngineFactory,
-            workflowStore = WorkflowStore(workflows),
-            nodeId = nodeId,
-            ulid = ulid
-        )
-        val nodeSynchronizationService = NodeSynchronizationService(repository, nodeId)
-        return ControlVerticle(
-            nodeId = nodeId,
-            engineHealthCheckService = engineHealthCheckService,
-            engineService = engineService,
-            processQueryService = processQueryService,
-            nodeSynchronizationService = nodeSynchronizationService,
-            config = config
-        )
-    }
+//    fun buildTestControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
+//        val ulid = ULID()
+//        val nodeId = NodeId(ulid.nextULID())
+//        val processQueryService = ProcessQueryService(repository)
+//        val workflowEngineFactory = WorkflowEngineFactory(repository)
+//        val config = Config(1, 8080)
+//        val engineHealthCheckService = EngineHealthCheckService(repository)
+//        val engineService = EngineService(
+//            engineHealthCheckService = engineHealthCheckService,
+//            workflowEngineFactory = workflowEngineFactory,
+//            workflowStore = WorkflowStore(workflows),
+//            nodeId = nodeId,
+//            ulid = ulid
+//        )
+//        val nodeSynchronizationService = NodeSynchronizationService(repository, nodeId)
+//        return ControlVerticle(
+//            nodeId = nodeId,
+//            engineHealthCheckService = engineHealthCheckService,
+//            engineService = engineService,
+//            processQueryService = processQueryService,
+//            nodeSynchronizationService = nodeSynchronizationService,
+//            config = config
+//        )
+//    }
     describe("Node") {
         beforeGroup {
             every { workflow.name() } returns "Test workflow"
-            setup { buildTestControlVerticle(it) }
+//            setup { buildTestControlVerticle(it) }
         }
         afterGroup {
-            setup { buildTestControlVerticle(it) }
+//            setup { buildTestControlVerticle(it) }
         }
 
         given("A calculator") {

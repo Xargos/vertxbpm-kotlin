@@ -15,7 +15,6 @@ class EngineService(
     private val engineHealthCheckService: EngineHealthCheckService,
     private val workflowEngineFactory: WorkflowEngineFactory,
     private val workflowStore: WorkflowStore,
-    private val nodeId: NodeId,
     private val ulid: ULID
 ) {
 
@@ -35,10 +34,10 @@ class EngineService(
 //            .onSuccess { routingContext.response().end() }
     }
 
-    fun startEngines(vertx: Vertx, engineNo: Int): Future<Void> {
+    fun startEngines(vertx: Vertx, engineNo: Int, nodeId: NodeId): Future<Void> {
         println("startEngines")
         val enginesStart = Promise.promise<Void>()
-        CompositeFuture.join((1..engineNo).map { startEngine(vertx) })
+        CompositeFuture.join((1..engineNo).map { startEngine(vertx, nodeId) })
             .onSuccess {
                 println("all deployed")
                 enginesStart.complete()
@@ -51,7 +50,7 @@ class EngineService(
         return enginesStart.future()
     }
 
-    private fun startEngine(vertx: Vertx): Future<String> {
+    private fun startEngine(vertx: Vertx, nodeId: NodeId): Future<String> {
         val engineStart = Promise.promise<String>()
         println("Deploying Engine: $engineStart")
         val engineId = EngineId(nodeId.value + "_" + ulid.nextULID())
@@ -89,6 +88,7 @@ class EngineService(
     }
 
     fun startProcess(
+        nodeId: NodeId,
         workflowName: String,
         body: String,
         eventBus: EventBus,
@@ -121,9 +121,21 @@ class EngineService(
 //                }
     }
 
-    fun restartProcesses(flowContexts: List<FlowContext<Any>>, eventBus: EventBus): Future<Void> {
+    fun restartProcesses(
+        flowContexts: List<FlowContext<Any>>,
+        eventBus: EventBus,
+        nodeId: NodeId
+    ): Future<Void> {
         val promise = Promise.promise<Void>()
-        CompositeFuture.join(flowContexts.map { startProcess(it.workflowName, "", eventBus, it.processId.value) })
+        CompositeFuture.join(flowContexts.map {
+            startProcess(
+                nodeId,
+                it.workflowName,
+                "",
+                eventBus,
+                it.processId.value
+            )
+        })
             .onSuccess { promise.complete() }
             .onFailure { promise.fail(it) }
         return promise.future()

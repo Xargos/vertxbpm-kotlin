@@ -4,22 +4,22 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import org.apache.ignite.Ignite
 import org.apache.ignite.cache.query.ScanQuery
+import org.apache.ignite.configuration.CollectionConfiguration
 import org.apache.ignite.lang.IgniteBiPredicate
 import process.control.NodeId
 import process.engine.*
+
 
 // TODO: Optimize stored data structure. Maybe additional indexes for restarting jobs.
 //  Make all async.
 //  When cleaning up dead nodes remove also all the engines and processes mappings.!
 class IgniteRepository(
-    private val globalCacheName: String,
     private val processesCacheName: String,
     private val enginesCacheName: String,
     private val nodesCacheName: String,
+    private val waitProcessesQueueName: String,
     private val ignite: Ignite
 ) : Repository {
-
-    private val nodesCacheKey = "NODES"
 
     override fun <T> saveProcess(flowContext: FlowContext<T>, processId: ProcessId): Future<Void> {
         try {
@@ -95,52 +95,6 @@ class IgniteRepository(
         return promise.future()
     }
 
-    override fun subscribeNodeExistence(nodeId: NodeId): Future<Void> {
-        val promise = Promise.promise<Void>()
-        val nodesCache = ignite.getOrCreateCache<String, Set<NodeId>>(globalCacheName)
-        nodesCache.putIfAbsent(nodesCacheKey, setOf())
-        val nodeIds = nodesCache.get(nodesCacheKey)
-        nodesCache.putAsync(nodesCacheKey, nodeIds.plus(nodeId))
-            .listen { promise.complete() }
-
-        return promise.future()
-    }
-
-    override fun removeNodesExistence(deadNodes: Set<NodeId>): Future<Void> {
-        val promise = Promise.promise<Void>()
-        val nodesCache = ignite.getOrCreateCache<String, Set<NodeId>>(globalCacheName)
-        if (nodesCache.containsKey(nodesCacheKey)) {
-            val nodeIds = nodesCache.get(nodesCacheKey)
-            nodesCache.putAsync(nodesCacheKey, nodeIds.minus(deadNodes))
-                .listen { promise.complete() }
-        } else {
-            promise.complete()
-        }
-
-        return promise.future()
-    }
-
-    override fun getSubscribedNodes(): Future<Set<NodeId>> {
-        val promise = Promise.promise<Set<NodeId>>()
-        val nodesCache = ignite.getOrCreateCache<String, Set<NodeId>>(globalCacheName)
-        nodesCache.getAsync(nodesCacheKey)
-            .listen { promise.complete(it.get() ?: setOf()) }
-
-        return promise.future()
-    }
-
-    override fun getProcessesOfDeadNodes(deadNodes: Set<NodeId>): Future<List<FlowContext<Any>>> {
-        val promise = Promise.promise<List<FlowContext<Any>>>()
-        val nodesCache = ignite.getOrCreateCache<NodeId, Set<EngineId>>(nodesCacheName)
-        nodesCache.getAllAsync(deadNodes)
-            .listen { nodes ->
-                getActiveProcesses(nodes.get().map { it.value }.filterNotNull().flatten().toSet())
-                    .setHandler(promise::handle)
-            }
-
-        return promise.future()
-    }
-
     override fun assignEngineToNode(nodeId: NodeId, engineId: EngineId): Future<Void> {
         val promise = Promise.promise<Void>()
         val nodesCache = ignite.getOrCreateCache<NodeId, Set<EngineId>>(nodesCacheName)
@@ -167,5 +121,69 @@ class IgniteRepository(
         }
 
         return promise.future()
+    }
+
+    override fun moveDeadNodeProcessesToWaitQueueAndCleanup(nodeId: NodeId) {
+        val transactions = ignite.transactions()
+        val waitProcessQueue = ignite.queue<FlowContext<Any>>(
+            waitProcessesQueueName,
+            0,
+            CollectionConfiguration()
+        )
+        transactions.txStart().use { tx ->
+            try {
+                val nodesCache = ignite.cache<NodeId, Set<EngineId>>(nodesCacheName)
+                if (!nodesCache.containsKey(nodeId)) {
+                    tx.rollback()
+                    return
+                }
+                val engineIds = nodesCache.get(nodeId)
+
+                val enginesCache = ignite.cache<EngineId, Set<ProcessId>>(enginesCacheName)
+                println(engineIds)
+                val processIds = enginesCache.getAll(engineIds).values.flatten().toSet()
+
+                val processesCache = ignite.getOrCreateCache<ProcessId, FlowContext<Any>?>(processesCacheName)
+                val flowContexts =
+                    processesCache.getAll(processIds).values
+                        .filterNotNull()
+                        .filter { it.currentStep !is Step.End<*> }
+                        .toList()
+                waitProcessQueue.addAll(flowContexts)
+                enginesCache.removeAll(engineIds)
+                nodesCache.remove(nodeId)
+                tx.commit()
+            } catch (e: Exception) {
+                tx.rollback()
+                e.printStackTrace()
+            }
+        }
+    }
+
+    override fun getAndExecuteWaitingProcess(exec: (fc: FlowContext<Any>) -> Future<Void>): Future<Void> {
+        val transactions = ignite.transactions()
+        val waitProcessQueue = ignite.queue<FlowContext<Any>>(
+            waitProcessesQueueName,
+            0,
+            CollectionConfiguration()
+        )
+        transactions.txStart().use { tx ->
+            try {
+                val flowContext = waitProcessQueue.poll()
+                if (flowContext != null) {
+                    return exec.invoke(flowContext)
+                        .compose {
+                            tx.commit()
+                            Future.succeededFuture<Void>()
+                        }
+                } else {
+                    tx.commit()
+                }
+            } catch (e: Exception) {
+                tx.rollback()
+                e.printStackTrace()
+            }
+        }
+        return Future.succeededFuture<Void>()
     }
 }
