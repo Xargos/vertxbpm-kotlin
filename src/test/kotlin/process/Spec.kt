@@ -1,18 +1,99 @@
 package process
 
+import de.huxhorn.sulky.ulid.ULID
+import io.mockk.every
+import io.mockk.mockk
+import io.vertx.core.AsyncResult
+import io.vertx.core.Vertx
+import io.vertx.core.VertxOptions
+import io.vertx.core.spi.cluster.ClusterManager
+import io.vertx.spi.cluster.ignite.IgniteClusterManager
+import org.apache.ignite.Ignition
 import org.jetbrains.spek.api.Spek
+import org.jetbrains.spek.api.dsl.describe
 import org.jetbrains.spek.api.dsl.given
 import org.jetbrains.spek.api.dsl.it
 import org.jetbrains.spek.api.dsl.on
 import org.junit.jupiter.api.Assertions.assertEquals
+import process.control.*
+import process.engine.Repository
+import process.engine.Workflow
+import process.engine.WorkflowEngineFactory
+import process.engine.WorkflowStore
+import process.infrastructure.IgniteRepository
+import kotlin.system.exitProcess
+
 
 class FirstSpec : Spek({
-    given("A calculator") {
-        val calculator = 1
-        on("Adding 3 and 5") {
-            val result = 2
-            it("Produces 8") {
-                assertEquals(8, result)
+    val workflow = mockk<Workflow<String>>()
+    val repository = mockk<Repository>()
+
+    fun setup(buildControlVerticle: (workflows: Map<String, Workflow<Any>>) -> ControlVerticle) {
+
+        val workflows = mapOf(workflow.name() to (workflow as Workflow<Any>))
+
+        val clusterManager: ClusterManager = IgniteClusterManager()
+
+        val options = VertxOptions().setClusterManager(clusterManager)
+        Vertx.clusteredVertx(options) { res: AsyncResult<Vertx?> ->
+            if (res.succeeded()) {
+                val serverVerticle = buildControlVerticle(workflows)
+                res.result()?.deployVerticle(serverVerticle) {
+                    if (it.failed()) {
+                        println("Startup failed")
+                        it.cause().printStackTrace()
+                        exitProcess(-1)
+                    } else {
+                        println("Startup finished successfully")
+                    }
+                }
+            } else { // failed!
+                throw res.cause()
+            }
+        }
+    }
+
+    fun buildTestControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
+        val ulid = ULID()
+        val nodeId = NodeId(ulid.nextULID())
+        val processQueryService = ProcessQueryService(repository)
+        val workflowEngineFactory = WorkflowEngineFactory(repository)
+        val config = Config(1, 8080)
+        val engineHealthCheckService = EngineHealthCheckService(repository)
+        val engineService = EngineService(
+            engineHealthCheckService = engineHealthCheckService,
+            workflowEngineFactory = workflowEngineFactory,
+            workflowStore = WorkflowStore(workflows),
+            nodeId = nodeId,
+            ulid = ulid
+        )
+        val nodeSynchronizationService = NodeSynchronizationService(repository, nodeId)
+        return ControlVerticle(
+            nodeId = nodeId,
+            engineHealthCheckService = engineHealthCheckService,
+            engineService = engineService,
+            processQueryService = processQueryService,
+            nodeSynchronizationService = nodeSynchronizationService,
+            config = config
+        )
+    }
+    describe("Node") {
+        beforeGroup {
+            every { workflow.name() } returns "Test workflow"
+            setup { buildTestControlVerticle(it) }
+        }
+        afterGroup {
+            setup { buildTestControlVerticle(it) }
+        }
+
+        given("A calculator") {
+            val calculator = 1
+            on("Adding 3 and 5") {
+                val result = 2
+                it("Produces 8") {
+                    assertEquals(3, result)
+                    println("ello")
+                }
             }
         }
     }

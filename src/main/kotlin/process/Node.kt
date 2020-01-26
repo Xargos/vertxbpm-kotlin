@@ -1,12 +1,17 @@
 package process
 
 import de.huxhorn.sulky.ulid.ULID
-import io.vertx.core.*
+import io.vertx.core.AsyncResult
+import io.vertx.core.Vertx
+import io.vertx.core.VertxOptions
+import io.vertx.core.impl.VertxImpl
 import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.spi.cluster.ignite.IgniteClusterManager
 import org.apache.ignite.Ignition
 import process.control.*
-import process.engine.*
+import process.engine.Workflow
+import process.engine.WorkflowEngineFactory
+import process.engine.WorkflowStore
 import process.infrastructure.IgniteRepository
 import kotlin.system.exitProcess
 
@@ -23,7 +28,7 @@ fun main() {
         if (res.succeeded()) {
             val serverVerticle = buildControlVerticle(workflows)
             res.result()?.deployVerticle(serverVerticle) {
-                if(it.failed()) {
+                if (it.failed()) {
                     println("Startup failed")
                     it.cause().printStackTrace()
                     exitProcess(-1)
@@ -56,24 +61,34 @@ fun main() {
 //}
 
 private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): ControlVerticle {
+    val ulid = ULID()
+    val nodeId = NodeId(ulid.nextULID())
     Ignition.start()
-    val igniteRepository = IgniteRepository("processes", "engines", Ignition.ignite())
+    val igniteRepository = IgniteRepository(
+        globalCacheName = "global",
+        processesCacheName = "processes",
+        enginesCacheName = "engines",
+        nodesCacheName = "nodes",
+        ignite = Ignition.ignite()
+    )
     val processQueryService = ProcessQueryService(igniteRepository)
     val workflowEngineFactory = WorkflowEngineFactory(igniteRepository)
-    val ulid = ULID()
-    val config = Config(2)
+    val config = Config(1, 8080)
     val engineHealthCheckService = EngineHealthCheckService(igniteRepository)
     val engineService = EngineService(
-        engineHealthCheckService,
-        workflowEngineFactory,
-        WorkflowStore(workflows),
-        NodeId(ulid.nextULID()),
-        ulid
+        engineHealthCheckService = engineHealthCheckService,
+        workflowEngineFactory = workflowEngineFactory,
+        workflowStore = WorkflowStore(workflows),
+        nodeId = nodeId,
+        ulid = ulid
     )
+    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository, nodeId)
     return ControlVerticle(
-        engineHealthCheckService,
-        engineService,
-        processQueryService,
-        config
+        nodeId = nodeId,
+        engineHealthCheckService = engineHealthCheckService,
+        engineService = engineService,
+        processQueryService = processQueryService,
+        nodeSynchronizationService = nodeSynchronizationService,
+        config = config
     )
 }

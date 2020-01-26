@@ -8,10 +8,7 @@ import io.vertx.core.Vertx
 import io.vertx.core.eventbus.DeliveryOptions
 import io.vertx.core.eventbus.EventBus
 import io.vertx.ext.web.RoutingContext
-import process.engine.EngineId
-import process.engine.EngineVerticle
-import process.engine.WorkflowEngineFactory
-import process.engine.WorkflowStore
+import process.engine.*
 
 
 class EngineService(
@@ -23,8 +20,11 @@ class EngineService(
 ) {
 
     fun undeployEngine(routingContext: RoutingContext, vertx: Vertx) {
+        println("undeployEngine")
         val deploymentId = routingContext.pathParam("deploymentId")
         vertx.undeploy(deploymentId) {
+            println("undeployEngine done")
+            println(it)
             if (it.failed()) {
                 routingContext.fail(it.cause())
             } else {
@@ -69,7 +69,7 @@ class EngineService(
                 engineStart.fail(it.cause())
             } else {
 //                println("Engine: $engineId is Up $engineStart")
-                engineHealthCheckService.registerEngine(engineId, it.result())
+                engineHealthCheckService.registerEngine(nodeId, engineId, it.result())
                 engineStart.complete("")
                 println("Engine: $engineId is Up ${engineStart.future()}")
             }
@@ -88,12 +88,17 @@ class EngineService(
         return engineStart.future()
     }
 
-    fun startProcess(workflowName: String, body: String, eventBus: EventBus): Future<String> {
+    fun startProcess(
+        workflowName: String,
+        body: String,
+        eventBus: EventBus,
+        processId: String = ulid.nextULID()
+    ): Future<String> {
         val promise = Promise.promise<String>()
         val deliveryOptions = DeliveryOptions()
         deliveryOptions.sendTimeout = 1000
         deliveryOptions.addHeader("workflowName", workflowName)
-        deliveryOptions.addHeader("processId", ulid.nextULID())
+        deliveryOptions.addHeader("processId", processId)
         eventBus.request<String>(
             nodeId.value + "_engine_startprocess",
             body,
@@ -116,9 +121,9 @@ class EngineService(
 //                }
     }
 
-    fun restartProcesses(workflowNames: List<String>, eventBus: EventBus): Future<Void> {
+    fun restartProcesses(flowContexts: List<FlowContext<Any>>, eventBus: EventBus): Future<Void> {
         val promise = Promise.promise<Void>()
-        CompositeFuture.join(workflowNames.map { startProcess(it, "", eventBus) })
+        CompositeFuture.join(flowContexts.map { startProcess(it.workflowName, "", eventBus, it.processId.value) })
             .onSuccess { promise.complete() }
             .onFailure { promise.fail(it) }
         return promise.future()

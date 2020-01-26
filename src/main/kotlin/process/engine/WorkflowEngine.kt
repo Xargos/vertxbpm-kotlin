@@ -39,12 +39,16 @@ class WorkflowEngine(
     ): Future<Void> {
         return repository.saveProcess(flowContext, flowContext.processId)
             .compose {
-                val step = steps[flowContext.currentStep.stepName]
-                step
-                    ?.exec
-                    ?.invoke(flowContext.currentStep.data)
-                    ?.compose { next(steps, step, flowContext, it) }
-                    ?: throw RuntimeException("No step")
+                try {
+                    val step = steps[flowContext.currentStep.stepName]
+                    step
+                        ?.exec
+                        ?.invoke(flowContext.currentStep.data)
+                        ?.compose { next(steps, step, flowContext, it) }
+                        ?: Future.failedFuture(RuntimeException("No step"))
+                } catch (e: Exception) {
+                    Future.failedFuture<Void>(e)
+                }
             }
     }
 

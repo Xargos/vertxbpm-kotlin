@@ -12,11 +12,13 @@ import process.engine.Repository
 
 class EngineHealthCheckService(private val repository: Repository) {
 
-    val healthyEngineIds: MutableMap<EngineId, String> = mutableMapOf()
-    val deadEngineIds: MutableSet<EngineId> = mutableSetOf()
+    private val healthyEngineIds: MutableMap<EngineId, String> = mutableMapOf()
+    private val deadEngineIds: MutableSet<EngineId> = mutableSetOf()
+    private val deliveryOptions = DeliveryOptions().setSendTimeout(2000)
 
-    fun registerEngine(engineId: EngineId, deploymentId: String) {
+    fun registerEngine(nodeId: NodeId, engineId: EngineId, deploymentId: String): Future<Void> {
         healthyEngineIds[engineId] = deploymentId
+        return repository.assignEngineToNode(nodeId, engineId)
     }
 
     fun getHealthyEngineIds(routingContext: RoutingContext) {
@@ -24,46 +26,39 @@ class EngineHealthCheckService(private val repository: Repository) {
     }
 
     fun startHealthChecks(
+        nodeId: NodeId,
         vertx: Vertx,
         engineNo: Int,
         engineService: EngineService
     ) {
-        println("startHealthChecks")
+//        println("startHealthChecks")
         vertx.setTimer(5000) {
-            println("Doing health check")
+            //            println("Doing health check")
             CompositeFuture
                 .join(healthyEngineIds.map { runHealthCheck(it.key, vertx.eventBus()) })
                 .onFailure {
-                    cleanUpDeadEngines(vertx)
+                    cleanUpDeadEngines(vertx, nodeId)
                         .compose { engineService.startEngines(vertx, engineNo - healthyEngineIds.size) }
                         .compose { this.resumeStoppedProcesses(engineService, vertx.eventBus()) }
                         .setHandler {
                             deadEngineIds.clear()
                         }
                 }
-                .onComplete { startHealthChecks(vertx, engineNo, engineService) }
+                .onComplete { startHealthChecks(nodeId, vertx, engineNo, engineService) }
         }
     }
 
     private fun resumeStoppedProcesses(engineService: EngineService, eventBus: EventBus): Future<Void> {
         return repository.getActiveProcesses(deadEngineIds)
-            .compose { engineService.restartProcesses(it.map { it1 -> it1.workflowName }, eventBus) }
+            .compose { engineService.restartProcesses(it, eventBus) }
     }
 
-    private fun cleanUpDeadEngines(vertx: Vertx): Future<Void> {
+    private fun cleanUpDeadEngines(vertx: Vertx, nodeId: NodeId): Future<Void> {
         println("cleanUpDeadEngines")
         val promise = Promise.promise<Void>()
         CompositeFuture
-            .join(deadEngineIds.map {
-                val undeployPromise = Promise.promise<Void>()
-                val deploymentId = healthyEngineIds.remove(it)
-                if (vertx.deploymentIDs().contains(deploymentId)) {
-                    vertx.undeploy(deploymentId, undeployPromise::handle)
-                } else {
-                    undeployPromise.complete()
-                }
-                undeployPromise.future()
-            })
+            .join(undeployDeadEngines(vertx))
+            .compose { this.repository.removeDeadEnginesFromCache(nodeId, deadEngineIds) }
             .onFailure { it.printStackTrace() }
             .onComplete {
                 println("cleanUpDeadEngines done")
@@ -72,10 +67,21 @@ class EngineHealthCheckService(private val repository: Repository) {
         return promise.future()
     }
 
+    private fun undeployDeadEngines(vertx: Vertx): List<Future<Void>> {
+        return deadEngineIds.map {
+            val undeployPromise = Promise.promise<Void>()
+            val deploymentId = healthyEngineIds.remove(it)
+            if (vertx.deploymentIDs().contains(deploymentId)) {
+                vertx.undeploy(deploymentId, undeployPromise::handle)
+            } else {
+                undeployPromise.complete()
+            }
+            undeployPromise.future()
+        }
+    }
+
     private fun runHealthCheck(engineId: EngineId, eventBus: EventBus): Future<Void> {
         val healthCheck = Promise.promise<Void>()
-        val deliveryOptions = DeliveryOptions()
-        deliveryOptions.sendTimeout = 1000
         eventBus.request<String>("{$engineId}_healthcheck", "", deliveryOptions)
         {
             if (it.failed()) {
@@ -83,7 +89,7 @@ class EngineHealthCheckService(private val repository: Repository) {
                 deadEngineIds.add(engineId)
                 healthCheck.fail("")
             } else {
-                println("health check success")
+//                println("health check success")
                 healthCheck.complete()
             }
 
