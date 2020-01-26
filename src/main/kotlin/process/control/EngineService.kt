@@ -96,7 +96,7 @@ class EngineService(
     ): Future<String> {
         val promise = Promise.promise<String>()
         val deliveryOptions = DeliveryOptions()
-        deliveryOptions.sendTimeout = 1000
+        deliveryOptions.sendTimeout = 2000
         deliveryOptions.addHeader("workflowName", workflowName)
         deliveryOptions.addHeader("processId", processId)
         eventBus.request<String>(

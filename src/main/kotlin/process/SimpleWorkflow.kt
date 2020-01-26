@@ -1,6 +1,7 @@
 package process
 
 import io.vertx.core.Future
+import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import process.engine.Step
 import process.engine.StepName
@@ -21,29 +22,32 @@ class SimpleWorkflow : Workflow<String> {
             Step.Start<String>(
                 StepName("start"),
                 StepName("step")
-            ) { println("Start"); Future.succeededFuture(it) },
+            ) {
+//                println("Start")
+                Future.succeededFuture(it) },
+            Step.Simple<String>(
+                StepName("step"),
+                StepName("end")
+            ) { data ->
+//                println("Step")
+//                val promise = Promise.promise<String>()
+//                vertx.setTimer(20000) { promise.complete(data) }
+//                promise.future()
+                Thread.sleep(1000)
+                Future.succeededFuture(data)
+            },
 //            Step.Simple<String>(
 //                StepName("step"),
 //                StepName("end")
 //            ) { data ->
 //                println("Step")
-//                throw RuntimeException("Ble")
-//                val promise = Promise.promise<String>()
-//                vertx.setTimer(20000) { promise.complete(data) }
-//                promise.future()
+////                if (Random.nextBoolean()) {
+////                    throw RuntimeException("Ble")
+////                }
+//                Future.succeededFuture(data)
 //            },
-            Step.Simple<String>(
-                StepName("step"),
-                StepName("end")
-            ) { data ->
-                println("Step")
-//                if (Random.nextBoolean()) {
-                    throw RuntimeException("Ble")
-//                }
-                Future.succeededFuture(data)
-            },
             Step.End(StepName("end")) {
-                println("End")
+//                println("End")
                 Future.succeededFuture(it)
             }
         ).associateBy({ it.name }, { it })

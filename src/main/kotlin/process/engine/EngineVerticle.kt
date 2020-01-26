@@ -26,13 +26,18 @@ class EngineVerticle(
         it.reply("")
     }
 
-    private fun startProcess(it: Message<String>) {
-        val workflowName = it.headers()["workflowName"]
-        val processId = it.headers()["processId"]
+    private fun startProcess(message: Message<String>) {
+        val workflowName = message.headers()["workflowName"]
+        val processId = message.headers()["processId"]
         val workflow =
             workflowStore.workflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName")
-        val data = workflow.decodeData(it.body())
-        workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(processId))
-        it.reply(processId)
+        val data = workflow.decodeData(message.body())
+
+        vertx.executeBlocking<Void>({
+            workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(processId))
+            it.complete()
+        }, true) {
+            message.reply(processId)
+        }
     }
 }

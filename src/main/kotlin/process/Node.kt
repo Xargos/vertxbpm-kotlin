@@ -72,7 +72,7 @@ private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): Control
     )
     val processQueryService = ProcessQueryService(igniteRepository)
     val workflowEngineFactory = WorkflowEngineFactory(igniteRepository)
-    val config = Config(1, 8080)
+    val config = Config(2, 8080)
     val engineHealthCheckService = EngineHealthCheckService(igniteRepository)
     val engineService = EngineService(
         engineHealthCheckService = engineHealthCheckService,

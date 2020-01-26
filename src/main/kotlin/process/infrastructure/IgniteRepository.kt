@@ -65,7 +65,7 @@ class IgniteRepository(
         val flowContexts =
             processesCache.getAll(processIds).values
                 .filterNotNull()
-                .filter { it.currentStep !is Step.End<*> }
+                .filter { !it.ended }
                 .toList()
         return Future.succeededFuture<List<FlowContext<Any>>>(flowContexts)
     }
@@ -73,10 +73,14 @@ class IgniteRepository(
     override fun assignProcessToEngine(engineId: EngineId, processId: ProcessId): Future<Void> {
         val promise = Promise.promise<Void>()
         val engineCache = ignite.getOrCreateCache<EngineId, Set<ProcessId>>(enginesCacheName)
-        engineCache.putIfAbsent(engineId, setOf())
-        val processIds = engineCache.get(engineId)
-        engineCache.putAsync(engineId, processIds.plus(processId))
-            .listen { promise.complete() }
+        engineCache.putIfAbsentAsync(engineId, setOf())
+            .listen {
+                engineCache.getAsync(engineId)
+                    .listen {
+                        engineCache.putAsync(engineId, it.get().plus(processId))
+                            .listen { promise.complete() }
+                    }
+            }
 
         return promise.future()
     }
@@ -84,13 +88,19 @@ class IgniteRepository(
     override fun removeProcessFromEngine(engineId: EngineId, processId: ProcessId): Future<Void> {
         val promise = Promise.promise<Void>()
         val engineCache = ignite.getOrCreateCache<EngineId, Set<ProcessId>>(enginesCacheName)
-        if (engineCache.containsKey(engineId)) {
-            val processIds = engineCache.get(engineId)
-            engineCache.putAsync(engineId, processIds.minus(processId))
-                .listen { promise.complete() }
-        } else {
-            promise.complete()
-        }
+        engineCache.containsKeyAsync(engineId)
+            .listen { exists ->
+                if (exists.get()) {
+                    engineCache.getAsync(engineId)
+                        .listen {
+                            engineCache.putAsync(engineId, it.get().minus(processId))
+                                .listen { promise.complete() }
+                        }
+                } else {
+                    promise.complete()
+                }
+            }
+
 
         return promise.future()
     }

@@ -11,7 +11,8 @@ data class FlowContext<T>(
     val workflowName: String,
     val processId: ProcessId,
     val currentStep: StepContext<T>,
-    val history: List<StepContext<T>>
+    val history: List<StepContext<T>>,
+    val ended: Boolean = false
 ) : Serializable
 
 data class StepName(val name: String) : Serializable

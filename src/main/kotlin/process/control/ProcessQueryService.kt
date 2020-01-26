@@ -2,10 +2,7 @@ package process.control
 
 import io.vertx.core.Future
 import io.vertx.ext.web.RoutingContext
-import process.engine.FlowContext
-import process.engine.ProcessId
-import process.engine.Repository
-import process.engine.StepName
+import process.engine.*
 
 class ProcessQueryService(
     private val repository: Repository
@@ -47,6 +44,38 @@ class ProcessQueryService(
 
             // Write to the response and end it
             response.end("$retrieveAllFlows")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            routingContext.fail(e)
+        }
+    }
+
+    fun getProcessesCount(routingContext: RoutingContext) {
+        try {
+            val count = repository.retrieveAllProcesses().count()
+            // This handler will be called for every request
+            val response = routingContext.response()
+            response.putHeader("content-type", "text/plain")
+
+            // Write to the response and end it
+            response.end("$count")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            routingContext.fail(e)
+        }
+    }
+
+    fun getActiveProcessesCount(routingContext: RoutingContext) {
+        try {
+            val activeProcesses = repository.retrieveAllProcesses()
+                .filter { !it.ended }
+                .count()
+            // This handler will be called for every request
+            val response = routingContext.response()
+            response.putHeader("content-type", "text/plain")
+
+            // Write to the response and end it
+            response.end("$activeProcesses")
         } catch (e: Exception) {
             e.printStackTrace()
             routingContext.fail(e)

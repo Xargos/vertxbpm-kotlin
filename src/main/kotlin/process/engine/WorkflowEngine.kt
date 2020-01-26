@@ -30,7 +30,7 @@ class WorkflowEngine(
             .compose { this.execStep(workflow.steps(vertx), (it ?: flowContext)) }
             .compose { repository.removeProcessFromEngine(engineId, processId) }
             .onFailure { it.printStackTrace() }
-            .onSuccess { println("Success") }
+//            .onSuccess { println("Success") }
     }
 
     private fun <T> execStep(
@@ -59,7 +59,10 @@ class WorkflowEngine(
         data: T
     ): Future<Void> {
         return when (step) {
-            is Step.End -> Future.succeededFuture()
+            is Step.End -> {
+                repository.saveProcess(flowContext.copy(ended = true), flowContext.processId)
+                Future.succeededFuture()
+            }
             is Step.Start -> {
                 val nextStep = StepContext(step.next, data)
                 this.execStep(

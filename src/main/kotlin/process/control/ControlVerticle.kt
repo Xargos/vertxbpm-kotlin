@@ -50,6 +50,8 @@ class ControlVerticle(
         router.route("/workflow/:workflowName").handler { startProcess(it, eventBus) }
 
         router.route("/processes/:processId").handler(processQueryService::getProcess)
+        router.route("/processes/count").handler(processQueryService::getProcessesCount)
+        router.route("/processes/activecount").handler(processQueryService::getActiveProcessesCount)
         router.route("/processes/").handler(processQueryService::getProcesses)
         router.route("/deployments/").handler { it.response().end(vertx.deploymentIDs().toString()) }
         router.route("/engines/").handler(engineHealthCheckService::getHealthyEngineIds)
@@ -78,6 +80,7 @@ class ControlVerticle(
         engineService.startProcess(nodeId, workflowName, it.bodyAsString ?: "", eventBus)
             .setHandler { it1 ->
                 if (it1.failed()) {
+                    it1.cause().printStackTrace()
                     it.fail(it1.cause())
                 } else {
                     val response = it.response()
