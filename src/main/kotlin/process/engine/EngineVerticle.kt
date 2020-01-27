@@ -33,11 +33,7 @@ class EngineVerticle(
             workflowStore.workflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName")
         val data = workflow.decodeData(message.body())
 
-        vertx.executeBlocking<Void>({
-            workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(processId))
-            it.complete()
-        }, true) {
-            message.reply(processId)
-        }
+        workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(processId))
+        message.reply(processId)
     }
 }

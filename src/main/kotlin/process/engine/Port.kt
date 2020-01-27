@@ -10,7 +10,7 @@ interface Repository {
     fun getActiveProcesses(engineIds: Set<EngineId>): Future<List<FlowContext<Any>>>
     fun assignProcessToEngine(engineId: EngineId, processId: ProcessId): Future<Void>
     fun removeProcessFromEngine(engineId: EngineId, processId: ProcessId): Future<Void>
-    fun moveDeadNodeProcessesToWaitQueueAndCleanup(nodeId: NodeId)
+    fun moveDeadNodeProcessesToWaitQueueAndCleanup(nodeId: NodeId): Future<Void>
     fun assignEngineToNode(nodeId: NodeId, engineId: EngineId): Future<Void>
     fun removeDeadEnginesFromCache(
         nodeId: NodeId,

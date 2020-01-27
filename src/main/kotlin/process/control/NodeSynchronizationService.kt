@@ -18,13 +18,7 @@ class NodeSynchronizationService(private val repository: Repository) {
         }
 
         override fun nodeLeft(nodeID: String) {
-            vertx.executeBlocking<Void>(
-                {
-                    repository.moveDeadNodeProcessesToWaitQueueAndCleanup(NodeId(nodeID))
-                    it.complete()
-                },
-                true
-            ) {}
+            repository.moveDeadNodeProcessesToWaitQueueAndCleanup(NodeId(nodeID))
         }
     }
 

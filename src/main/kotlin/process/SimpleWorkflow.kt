@@ -33,7 +33,7 @@ class SimpleWorkflow : Workflow<String> {
 //                val promise = Promise.promise<String>()
 //                vertx.setTimer(20000) { promise.complete(data) }
 //                promise.future()
-                Thread.sleep(1000)
+//                Thread.sleep(1000)
                 Future.succeededFuture(data)
             },
 //            Step.Simple<String>(

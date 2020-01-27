@@ -1,8 +1,15 @@
 package process.control
 
 import io.vertx.core.Future
+import io.vertx.core.Promise
+import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
-import process.engine.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import process.engine.FlowContext
+import process.engine.ProcessId
+import process.engine.Repository
+import process.engine.StepName
 
 class ProcessQueryService(
     private val repository: Repository
@@ -50,35 +57,33 @@ class ProcessQueryService(
         }
     }
 
-    fun getProcessesCount(routingContext: RoutingContext) {
-        try {
-            val count = repository.retrieveAllProcesses().count()
-            // This handler will be called for every request
-            val response = routingContext.response()
-            response.putHeader("content-type", "text/plain")
-
-            // Write to the response and end it
-            response.end("$count")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            routingContext.fail(e)
+    fun getProcessesCount(): Future<Int> {
+        val promise = Promise.promise<Int>()
+        GlobalScope.launch {
+            try {
+                val count = repository.retrieveAllProcesses().count()
+                promise.complete(count)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                promise.fail(e)
+            }
         }
+        return promise.future()
     }
 
-    fun getActiveProcessesCount(routingContext: RoutingContext) {
-        try {
-            val activeProcesses = repository.retrieveAllProcesses()
-                .filter { !it.ended }
-                .count()
-            // This handler will be called for every request
-            val response = routingContext.response()
-            response.putHeader("content-type", "text/plain")
-
-            // Write to the response and end it
-            response.end("$activeProcesses")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            routingContext.fail(e)
+    fun getActiveProcessesCount(): Future<Int> {
+        val promise = Promise.promise<Int>()
+        GlobalScope.launch {
+            try {
+                val count = repository.retrieveAllProcesses()
+                    .filter { !it.ended }
+                    .count()
+                promise.complete(count)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                promise.fail(e)
+            }
         }
+        return promise.future()
     }
 }

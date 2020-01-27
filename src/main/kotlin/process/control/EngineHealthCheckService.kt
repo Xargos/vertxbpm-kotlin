@@ -21,8 +21,8 @@ class EngineHealthCheckService(private val repository: Repository) {
         return repository.assignEngineToNode(nodeId, engineId)
     }
 
-    fun getHealthyEngineIds(routingContext: RoutingContext) {
-        routingContext.response().end(healthyEngineIds.toString())
+    fun getHealthyEngineIds(): String {
+        return healthyEngineIds.toString()
     }
 
     fun startHealthChecks(

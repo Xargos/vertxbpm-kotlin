@@ -50,11 +50,31 @@ class ControlVerticle(
         router.route("/workflow/:workflowName").handler { startProcess(it, eventBus) }
 
         router.route("/processes/:processId").handler(processQueryService::getProcess)
-        router.route("/processes/count").handler(processQueryService::getProcessesCount)
-        router.route("/processes/activecount").handler(processQueryService::getActiveProcessesCount)
+        router.route("/processes/count").handler { routingContext ->
+            processQueryService.getProcessesCount()
+                .onSuccess {
+                    val response = routingContext.response()
+                    response.putHeader("content-type", "text/plain")
+                    response.end("$it")
+                }
+                .onFailure {
+                    routingContext.fail(it.cause)
+                }
+        }
+        router.route("/processes/activecount").handler { routingContext ->
+            processQueryService.getActiveProcessesCount()
+                .onSuccess {
+                    val response = routingContext.response()
+                    response.putHeader("content-type", "text/plain")
+                    response.end("$it")
+                }
+                .onFailure {
+                    routingContext.fail(it.cause)
+                }
+        }
         router.route("/processes/").handler(processQueryService::getProcesses)
         router.route("/deployments/").handler { it.response().end(vertx.deploymentIDs().toString()) }
-        router.route("/engines/").handler(engineHealthCheckService::getHealthyEngineIds)
+        router.route("/engines/").handler { it.response().end(engineHealthCheckService.getHealthyEngineIds()) }
         router.route("/engines/deploy").handler { engineService.startEngines(vertx, 2, nodeId) }
         router.route("/engines/:deploymentId").handler { engineService.undeployEngine(it, vertx) }
         val serverStart = Promise.promise<Void>()
