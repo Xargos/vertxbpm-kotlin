@@ -1,29 +1,30 @@
 package process.performance
 
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.CompositeFuture
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.EventBus
-import io.vertx.core.impl.VertxImpl
-import process.control.*
+import process.control.EngineService
+import process.control.NodeId
+import process.control.ProcessQueryService
+import process.engine.Repository
 
 class PerformanceTestVerticle(
-    private val engineHealthCheckService: EngineHealthCheckService,
     private val engineService: EngineService,
     private val processQueryService: ProcessQueryService,
-    private val nodeSynchronizationService: NodeSynchronizationService,
-    private val config: Config
+    private val repository: Repository
 ) : AbstractVerticle() {
 
-    private lateinit var nodeId: NodeId
+    private val nodeId = NodeId("TEST")
 
     override fun start(startPromise: Promise<Void>) {
-        nodeId = NodeId((vertx as VertxImpl).nodeID)
-        engineService.startEngines(vertx, config.engineNo, nodeId)
+//        nodeId = NodeId((vertx as VertxImpl).nodeID)
+        CompositeFuture.join(repository.init(vertx), engineService.startEngines(vertx, 1, nodeId))
             .onSuccess {
-//                engineHealthCheckService.startHealthChecks(nodeId, vertx, config.engineNo, engineService)
-                nodeSynchronizationService.subscribeNodeExistence(vertx)
-                nodeSynchronizationService.listenToWaitingProcesses(vertx, engineService, nodeId)
+                ////                engineHealthCheckService.startHealthChecks(nodeId, vertx, config.engineNo, engineService)
+//                nodeSynchronizationService.subscribeNodeExistence(vertx)
+//                nodeSynchronizationService.listenToWaitingProcesses(vertx, engineService, nodeId)
                 startPromise.complete()
             }
             .onFailure {
@@ -45,11 +46,11 @@ class PerformanceTestVerticle(
         return promise.future()
     }
 
-    fun getProcessCount():Future<Int> {
+    fun getProcessCount(): Future<Int> {
         return processQueryService.getProcessesCount()
     }
 
-    fun getActiveProcessesCount():Future<Int> {
+    fun getActiveProcessesCount(): Future<Int> {
         return processQueryService.getActiveProcessesCount()
     }
 }

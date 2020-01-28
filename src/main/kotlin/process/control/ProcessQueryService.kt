@@ -2,11 +2,9 @@ package process.control
 
 import io.vertx.core.Future
 import io.vertx.core.Promise
-import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import process.engine.FlowContext
 import process.engine.ProcessId
 import process.engine.Repository
 import process.engine.StepName
@@ -34,12 +32,13 @@ class ProcessQueryService(
     }
 
     private fun <T> getProcessStep(processId: ProcessId): Future<StepName> {
-        return repository.retrieveProcess<T>(processId)
-            .compose {
-                val flowContext =
-                    (it ?: throw RuntimeException("Unknown process: $processId")) as FlowContext<*>
-                Future.succeededFuture(flowContext.currentStep.stepName)
-            }
+//        return repository.getOrCreateProcess<T>(processId)
+//            .compose {
+//                val flowContext =
+//                    (it ?: throw RuntimeException("Unknown process: $processId")) as FlowContext<*>
+//                Future.succeededFuture(flowContext.currentStep.stepName)
+//            }
+        return Future.succeededFuture<StepName>()
     }
 
     fun getProcesses(routingContext: RoutingContext) {
@@ -73,16 +72,14 @@ class ProcessQueryService(
 
     fun getActiveProcessesCount(): Future<Int> {
         val promise = Promise.promise<Int>()
-        GlobalScope.launch {
-            try {
-                val count = repository.retrieveAllProcesses()
-                    .filter { !it.ended }
-                    .count()
-                promise.complete(count)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                promise.fail(e)
-            }
+        try {
+            val count = repository.retrieveAllProcesses()
+                .filter { !it.ended }
+                .count()
+            promise.complete(count)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            promise.fail(e)
         }
         return promise.future()
     }

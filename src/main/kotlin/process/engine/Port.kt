@@ -1,14 +1,16 @@
 package process.engine
 
 import io.vertx.core.Future
+import io.vertx.core.Vertx
 import process.control.NodeId
 
 interface Repository {
-    fun <T> saveProcess(flowContext: FlowContext<T>, processId: ProcessId): Future<Void>
-    fun <T> retrieveProcess(processId: ProcessId): Future<FlowContext<T>?>
+    fun init(vertx: Vertx): Future<Void>
+    fun <T> saveProcess(flowContext: FlowContext<T>): Future<Void>
+    fun <T> getOrCreateProcess(flowContext: FlowContext<T>): Future<FlowContext<T>>
     fun retrieveAllProcesses(): List<FlowContext<Any>>
     fun getActiveProcesses(engineIds: Set<EngineId>): Future<List<FlowContext<Any>>>
-    fun assignProcessToEngine(engineId: EngineId, processId: ProcessId): Future<Void>
+    fun startNewProcess(processId: ProcessId): Future<Void>
     fun removeProcessFromEngine(engineId: EngineId, processId: ProcessId): Future<Void>
     fun moveDeadNodeProcessesToWaitQueueAndCleanup(nodeId: NodeId): Future<Void>
     fun assignEngineToNode(nodeId: NodeId, engineId: EngineId): Future<Void>

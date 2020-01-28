@@ -9,13 +9,14 @@ import kotlinx.coroutines.launch
 import org.apache.ignite.Ignition
 import process.SimpleWorkflow
 import process.control.*
+import process.engine.EngineId
 import process.engine.Workflow
 import process.engine.WorkflowEngineFactory
 import process.engine.WorkflowStore
 import process.infrastructure.IgniteRepository
 import kotlin.system.exitProcess
 
-const val jobNo: Int = 600
+const val jobNo: Int = 2000
 
 fun main() {
 
@@ -40,18 +41,22 @@ fun main() {
                     CompositeFuture.join((1..jobNo).map {
                         val promise = Promise.promise<Void>()
                         GlobalScope.launch {
-                            serverVerticle.startProcess("SimpleWorkflow", "", vertx.eventBus())
-                                .onSuccess { promise.complete() }
-                                .onFailure { t -> promise.fail(t.cause) }
+                            try {
+                                serverVerticle.startProcess("SimpleWorkflow", "", vertx.eventBus())
+                                    .onSuccess { promise.complete() }
+                                    .onFailure { t -> promise.fail(t.cause) }
+                            } catch (e: Exception) {
+                                promise.fail(e)
+                            }
                         }
                         promise.future()
                     })
-                        .onSuccess { println("All succeeded") }
+                        .onSuccess { println("All succeeded: $jobNo") }
                         .onFailure { println("Some failed") }
-                        .onComplete { println("Duration (millis): ${(System.nanoTime() - start) / 1_000_000}") }
-
-                    check(vertx, serverVerticle, System.nanoTime())
-
+                        .onComplete {
+                            println("Duration (millis): ${(System.nanoTime() - start) / 1_000_000}")
+                            check(vertx, serverVerticle, System.nanoTime())
+                        }
                 }
             }
 //                ?.onSuccess {
@@ -70,13 +75,13 @@ fun main() {
 
 private fun check(vertx: Vertx, serverVerticle: PerformanceTestVerticle, startTime: Long) {
     vertx.setPeriodic(1000) { periodic ->
-        serverVerticle.getActiveProcessesCount()
-            .setHandler { println("active: $it") }
         serverVerticle.getProcessCount()
+            .setHandler { println("total stored processes: $it") }
+        serverVerticle.getActiveProcessesCount()
             .setHandler {
-                println(it)
+                println("active: $it")
 
-                if (it.result() >= jobNo) {
+                if (it.result() == 0) {
                     val duration = (System.nanoTime() - startTime) / 1_000_000_000
                     println("time took: $duration, per second: ${jobNo / duration}")
                     vertx.cancelTimer(periodic)
@@ -98,7 +103,9 @@ private fun check(vertx: Vertx, serverVerticle: PerformanceTestVerticle, startTi
 private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): PerformanceTestVerticle {
     val ulid = ULID()
     Ignition.start()
+    val engineId = EngineId(ulid.nextULID().toString())
     val igniteRepository = IgniteRepository(
+        engineId = engineId,
         waitProcessesQueueName = "waitProcessesQueue",
         processesCacheName = "processes",
         enginesCacheName = "engines",
@@ -117,10 +124,8 @@ private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): Perform
     )
     val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
     return PerformanceTestVerticle(
-        engineHealthCheckService = engineHealthCheckService,
         engineService = engineService,
         processQueryService = processQueryService,
-        nodeSynchronizationService = nodeSynchronizationService,
-        config = config
+        repository = igniteRepository
     )
 }
