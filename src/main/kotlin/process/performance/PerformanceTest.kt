@@ -16,7 +16,9 @@ import process.engine.WorkflowStore
 import process.infrastructure.IgniteRepository
 import kotlin.system.exitProcess
 
-const val jobNo: Int = 2000
+const val jobNo: Int = 1000
+const val speed = 100L
+const val repetitions: Int = 200
 
 fun main() {
 
@@ -37,26 +39,36 @@ fun main() {
                 } else {
                     println("Startup finished successfully")
                     val vertx = res.result()!!
-                    val start = System.nanoTime()
-                    CompositeFuture.join((1..jobNo).map {
-                        val promise = Promise.promise<Void>()
-                        GlobalScope.launch {
-                            try {
-                                serverVerticle.startProcess("SimpleWorkflow", "", vertx.eventBus())
-                                    .onSuccess { promise.complete() }
-                                    .onFailure { t -> promise.fail(t.cause) }
-                            } catch (e: Exception) {
-                                promise.fail(e)
+                    var count = 0
+                    val startTime = System.nanoTime()
+                    vertx.setPeriodic(speed) {id ->
+                        val start = System.nanoTime()
+                        CompositeFuture.join((1..jobNo).map {
+                            val promise = Promise.promise<Void>()
+                            GlobalScope.launch {
+                                try {
+                                    serverVerticle.startProcess("SimpleWorkflow", "", vertx.eventBus())
+                                        .onSuccess { promise.complete() }
+                                        .onFailure { t -> promise.fail(t.cause) }
+                                } catch (e: Exception) {
+                                    promise.fail(e)
+                                }
                             }
-                        }
-                        promise.future()
-                    })
-                        .onSuccess { println("All succeeded: $jobNo") }
-                        .onFailure { println("Some failed") }
-                        .onComplete {
-                            println("Duration (millis): ${(System.nanoTime() - start) / 1_000_000}")
-                            check(vertx, serverVerticle, System.nanoTime())
-                        }
+                            promise.future()
+                        })
+//                            .onSuccess { println("All succeeded: $jobNo") }
+                            .onFailure { println("Some failed") }
+                            .onComplete {
+                                println("Duration (millis): ${(System.nanoTime() - start) / 1_000_000}")
+                                if(count == repetitions) {
+                                    vertx.cancelTimer(id)
+                                    check(vertx, serverVerticle, startTime)
+                                } else {
+                                    count++
+                                }
+
+                            }
+                    }
                 }
             }
 //                ?.onSuccess {
@@ -83,7 +95,7 @@ private fun check(vertx: Vertx, serverVerticle: PerformanceTestVerticle, startTi
 
                 if (it.result() == 0) {
                     val duration = (System.nanoTime() - startTime) / 1_000_000_000
-                    println("time took: $duration, per second: ${jobNo / duration}")
+                    println("time took: $duration, per second: ${jobNo / duration}, total processed jobs: ${serverVerticle.getTotalFinishedProcesses()}")
                     vertx.cancelTimer(periodic)
                 }
             }

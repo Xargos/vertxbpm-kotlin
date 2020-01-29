@@ -83,4 +83,10 @@ class ProcessQueryService(
         }
         return promise.future()
     }
+
+    fun getTotalFinishedProcesses(): Int {
+        return repository.retrieveAllProcesses()
+            .filter { it.ended }
+            .count()
+    }
 }

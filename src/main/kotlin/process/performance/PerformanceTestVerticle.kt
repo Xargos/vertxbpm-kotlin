@@ -53,4 +53,8 @@ class PerformanceTestVerticle(
     fun getActiveProcessesCount(): Future<Int> {
         return processQueryService.getActiveProcessesCount()
     }
+
+    fun getTotalFinishedProcesses(): Int {
+        return processQueryService.getTotalFinishedProcesses()
+    }
 }
