@@ -3,21 +3,12 @@ package process.engine
 import io.vertx.core.Future
 import io.vertx.core.Promise.promise
 import io.vertx.core.Vertx
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import java.io.Serializable
 
 data class ProcessId(val value: String) : Serializable
 
-class WorkflowEngineFactory(private val repository: Repository) {
-    fun buildEngine(engineId: EngineId): WorkflowEngine {
-        return WorkflowEngine(repository, engineId)
-    }
-}
-
 class WorkflowEngine(
-    private val repository: Repository,
-    private val engineId: EngineId
+    private val repository: Repository
 ) {
 
     fun <T> start(
@@ -34,7 +25,7 @@ class WorkflowEngine(
             .compose {
                 promise.complete()
                 this.execStep(workflow.steps(vertx), (it ?: flowContext))
-                    .compose { repository.removeProcessFromEngine(engineId, processId) }
+                    .compose { repository.removeProcessFromEngine(processId) }
             }
             .onFailure {
                 it.printStackTrace()

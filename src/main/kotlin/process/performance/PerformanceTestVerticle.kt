@@ -5,9 +5,10 @@ import io.vertx.core.CompositeFuture
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.EventBus
-import process.control.EngineService
-import process.control.NodeId
-import process.control.ProcessQueryService
+import process.engine.EngineService
+import process.engine.NodeId
+import process.verticles.NodeId
+import process.engine.ProcessQueryService
 import process.engine.Repository
 
 class PerformanceTestVerticle(

@@ -1,14 +1,14 @@
-package process.engine
+package process.verticles
 
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
+import process.engine.ProcessId
+import process.engine.WorkflowEngine
+import process.engine.WorkflowStore
 import java.io.Serializable
 
-data class EngineId(val value: String) : Serializable
-
 class EngineVerticle(
-    private val engineId: EngineId,
     private val workflowEngine: WorkflowEngine,
     private val workflowStore: WorkflowStore,
     private val startProcessTopic: String
@@ -33,7 +33,10 @@ class EngineVerticle(
             workflowStore.workflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName")
         val data = workflow.decodeData(message.body())
 
-        workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(processId))
+        workflowEngine.start(workflow, vertx, inputData = data, processId = ProcessId(
+            processId
+        )
+        )
         message.reply(processId)
     }
 }

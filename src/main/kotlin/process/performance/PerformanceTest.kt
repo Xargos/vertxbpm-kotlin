@@ -8,12 +8,9 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.apache.ignite.Ignition
 import process.SimpleWorkflow
-import process.control.*
-import process.engine.EngineId
-import process.engine.Workflow
-import process.engine.WorkflowEngineFactory
-import process.engine.WorkflowStore
+import process.engine.*
 import process.infrastructure.IgniteRepository
+import process.verticles.Config
 import kotlin.system.exitProcess
 
 const val jobNo: Int = 1000
@@ -43,7 +40,7 @@ fun main() {
                     val startTime = System.nanoTime()
                     vertx.setPeriodic(speed) {id ->
                         val start = System.nanoTime()
-                        CompositeFuture.join((1..jobNo).map {
+                        CompositeFuture.join((0..jobNo).map {
                             val promise = Promise.promise<Void>()
                             GlobalScope.launch {
                                 try {
@@ -115,7 +112,6 @@ private fun check(vertx: Vertx, serverVerticle: PerformanceTestVerticle, startTi
 private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): PerformanceTestVerticle {
     val ulid = ULID()
     Ignition.start()
-    val engineId = EngineId(ulid.nextULID().toString())
     val igniteRepository = IgniteRepository(
         engineId = engineId,
         waitProcessesQueueName = "waitProcessesQueue",
@@ -134,7 +130,6 @@ private fun buildControlVerticle(workflows: Map<String, Workflow<Any>>): Perform
         workflowStore = WorkflowStore(workflows),
         ulid = ulid
     )
-    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
     return PerformanceTestVerticle(
         engineService = engineService,
         processQueryService = processQueryService,

@@ -8,7 +8,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.apache.ignite.Ignite
 import org.apache.ignite.configuration.CollectionConfiguration
-import process.control.NodeId
 import process.engine.*
 import javax.cache.Cache
 
@@ -17,9 +16,8 @@ import javax.cache.Cache
 //  Make all async.
 //  When cleaning up dead nodes remove also all the engines and processes mappings.!
 class IgniteRepository(
-    private val engineId: EngineId,
+    private val nodeId: NodeId,
     processesCacheName: String,
-    enginesCacheName: String,
     nodesCacheName: String,
     waitProcessesQueueName: String,
     ignite: Ignite
@@ -27,8 +25,7 @@ class IgniteRepository(
 
     private val transactions = ignite.transactions()
     private val processesCache = ignite.createCache<ProcessId, FlowContext<Any>>(processesCacheName)
-    private val enginesCache = ignite.createCache<EngineId, Set<ProcessId>>(enginesCacheName)
-    private val nodesCache = ignite.createCache<NodeId, Set<EngineId>>(nodesCacheName)
+    private val nodesCache = ignite.createCache<NodeId, Set<ProcessId>>(nodesCacheName)
     private val waitProcessesQueue = ignite.queue<FlowContext<Any>>(
         waitProcessesQueueName,
         0,
@@ -40,7 +37,7 @@ class IgniteRepository(
     private val pendingProcessesToSave: MutableList<Pair<FlowContext<Any>, Promise<Void>>> = mutableListOf()
 
     override fun init(vertx: Vertx): Future<Void> {
-        enginesCache.putIfAbsentAsync(engineId, setOf())
+        nodesCache.putIfAbsentAsync(nodeId, setOf())
         runBatchUpload(vertx)
         return Future.succeededFuture()
     }
@@ -62,8 +59,9 @@ class IgniteRepository(
 
     private fun runGetOrCreateProcess(vertx: Vertx): Future<Void> {
         val promise = Promise.promise<Void>()
-        val newContextLocal = (0 until newContexts.size).map { newContexts.removeAt(0) }
         vertx.executeBlocking<Void>({ p ->
+            val newContextLocal = newContexts.toMap()
+            newContexts.clear()
             //            println("getting or creating new processes: ${newContextLocal.size}")
 
             processesCache.getAllAsync(newContextLocal.keys.map { it.processId }.toSet())
@@ -92,11 +90,12 @@ class IgniteRepository(
 
     private fun assignNewProcessesToEngine(vertx: Vertx): Future<Void> {
         val promise = Promise.promise<Void>()
-        val assignProcessToEngineLocal = (0 until newProcesses.size).map { newProcesses.removeAt(0) }
         vertx.executeBlocking<Void>({ p ->
-            enginesCache.getAsync(engineId)
+            val assignProcessToEngineLocal = newProcesses.toMap()
+            newProcesses.clear()
+            nodesCache.getAsync(nodeId)
                 .listen {
-                    enginesCache.putAsync(engineId, it.get().plus(assignProcessToEngineLocal.keys))
+                    nodesCache.putAsync(nodeId, it.get().plus(assignProcessToEngineLocal.keys))
                         .listen {
                             //                            println("Assigning new processes: ${assignProcessToEngineLocal.size}")
                             assignProcessToEngineLocal.values.forEach { p -> p.complete() }
@@ -114,10 +113,10 @@ class IgniteRepository(
 
     private fun runStoreSteps(vertx: Vertx): Future<Void> {
         val promise = Promise.promise<Void>()
-        val pendingProcessesToSaveLocal =
-            (0 until pendingProcessesToSave.size).map { pendingProcessesToSave.removeAt(0) }
         vertx.executeBlocking<Void>({ p ->
 
+            val pendingProcessesToSaveLocal = pendingProcessesToSave.toMap()
+            pendingProcessesToSave.clear()
             processesCache.putAllAsync(pendingProcessesToSaveLocal.keys.map { it.processId to it }.toMap())
                 .listen {
                     //                    println("Stored ${pendingProcessesToSaveLocal.size} processes")
@@ -133,25 +132,33 @@ class IgniteRepository(
 
     override fun <T> saveProcess(flowContext: FlowContext<T>): Future<Void> {
         val promise = Promise.promise<Void>()
-        pendingProcessesToSave[FlowContext(
-            flowContext.workflowName,
-            flowContext.processId,
-            StepContext(flowContext.currentStep.stepName, flowContext.currentStep.data as Any),
-            flowContext.history.map { StepContext(it.stepName, it.data as Any) },
-            flowContext.ended
-        )] = promise
+        pendingProcessesToSave.add(
+            Pair(
+                FlowContext(
+                    flowContext.workflowName,
+                    flowContext.processId,
+                    StepContext(flowContext.currentStep.stepName, flowContext.currentStep.data as Any),
+                    flowContext.history.map { StepContext(it.stepName, it.data as Any) },
+                    flowContext.ended
+                ), promise
+            )
+        )
         return promise.future()
     }
 
     override fun <T> getOrCreateProcess(flowContext: FlowContext<T>): Future<FlowContext<T>> {
         val promiseAny = Promise.promise<FlowContext<Any>>()
-        newContexts[FlowContext(
-            flowContext.workflowName,
-            flowContext.processId,
-            StepContext(flowContext.currentStep.stepName, flowContext.currentStep.data as Any),
-            flowContext.history.map { StepContext(it.stepName, it.data as Any) },
-            flowContext.ended
-        )] = promiseAny
+        newContexts.add(
+            Pair(
+                FlowContext(
+                    flowContext.workflowName,
+                    flowContext.processId,
+                    StepContext(flowContext.currentStep.stepName, flowContext.currentStep.data as Any),
+                    flowContext.history.map { StepContext(it.stepName, it.data as Any) },
+                    flowContext.ended
+                ), promiseAny
+            )
+        )
         return promiseAny.future()
             .compose {
                 Future.succeededFuture(
@@ -177,70 +184,26 @@ class IgniteRepository(
         return fc
     }
 
-    override fun getActiveProcesses(engineIds: Set<EngineId>): Future<List<FlowContext<Any>>> {
-        val processIds = enginesCache.getAll(engineIds).values.flatten().toSet()
-        val flowContexts =
-            processesCache.getAll(processIds).values
-                .filterNotNull()
-                .filter { !it.ended }
-                .toList()
-        return Future.succeededFuture<List<FlowContext<Any>>>(flowContexts)
-    }
-
     override fun startNewProcess(processId: ProcessId): Future<Void> {
         val promise = Promise.promise<Void>()
         newProcesses.add(Pair(processId, promise))
         return promise.future()
     }
 
-    override fun removeProcessFromEngine(engineId: EngineId, processId: ProcessId): Future<Void> {
+    override fun removeProcessFromEngine(processId: ProcessId): Future<Void> {
         val promise = Promise.promise<Void>()
-//        GlobalScope.launch {
-//            val engineCache = ignite.cache<EngineId, Set<ProcessId>>(enginesCacheName)
-//            engineCache.containsKeyAsync(engineId)
-//                .listen { exists ->
-//                    if (exists.get()) {
-//                        engineCache.getAsync(engineId)
-//                            .listen {
-//                                engineCache.putAsync(engineId, it.get().minus(processId))
-//                                    .listen { promise.complete() }
-//                            }
-//                    } else {
-//                        promise.complete()
-//                    }
-//                }
-//        }
-        promise.complete()
-        return promise.future()
-    }
-
-    override fun assignEngineToNode(nodeId: NodeId, engineId: EngineId): Future<Void> {
-        val promise = Promise.promise<Void>()
-        GlobalScope.launch {
-            nodesCache.putIfAbsent(nodeId, setOf())
-            val engineIds = nodesCache.get(nodeId)
-            nodesCache.putAsync(nodeId, engineIds.plus(engineId))
-                .listen { promise.complete() }
-        }
-
-        return promise.future()
-    }
-
-    override fun removeDeadEnginesFromCache(
-        nodeId: NodeId,
-        deadEngineIds: MutableSet<EngineId>
-    ): Future<Void> {
-        val promise = Promise.promise<Void>()
-        GlobalScope.launch {
-            if (nodesCache.containsKey(nodeId)) {
-                val engineIds = nodesCache.get(nodeId)
-                nodesCache.putAsync(nodeId, engineIds.minus(deadEngineIds))
-                    .listen { promise.complete() }
-            } else {
-                promise.complete()
+        nodesCache.containsKeyAsync(nodeId)
+            .listen { exists ->
+                if (exists.get()) {
+                    nodesCache.getAsync(nodeId)
+                        .listen {
+                            nodesCache.putAsync(nodeId, it.get().minus(processId))
+                                .listen { promise.complete() }
+                        }
+                } else {
+                    promise.complete()
+                }
             }
-        }
-
         return promise.future()
     }
 
@@ -253,10 +216,9 @@ class IgniteRepository(
                         tx.rollback()
                         promise.complete()
                     } else {
-                        val engineIds = nodesCache.get(nodeId)
+                        val processIds = nodesCache.get(nodeId)
 
-                        println(engineIds)
-                        val processIds = enginesCache.getAll(engineIds).values.flatten().toSet()
+                        println(processIds)
 
                         val flowContexts =
                             processesCache.getAll(processIds).values
@@ -264,7 +226,6 @@ class IgniteRepository(
                                 .filter { it.currentStep !is Step.End<*> }
                                 .toList()
                         waitProcessesQueue.addAll(flowContexts)
-                        enginesCache.removeAll(engineIds)
                         nodesCache.remove(nodeId)
                         tx.commit()
                         promise.complete()

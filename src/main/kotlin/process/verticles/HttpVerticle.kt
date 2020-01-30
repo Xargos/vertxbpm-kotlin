@@ -1,4 +1,4 @@
-package process.control
+package process.verticles
 
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.CompositeFuture
@@ -8,16 +8,15 @@ import io.vertx.core.eventbus.EventBus
 import io.vertx.core.impl.VertxImpl
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
+import process.engine.EngineService
+import process.engine.NodeSynchronizationService
+import process.engine.ProcessQueryService
 import java.io.Serializable
 
-
-data class NodeId(val value: String) : Serializable
-
-data class Config(val engineNo: Int, val port: Int) : Serializable
+data class Config(val port: Int) : Serializable
 
 
-class ControlVerticle(
-    private val engineHealthCheckService: EngineHealthCheckService,
+class HttpVerticle(
     private val engineService: EngineService,
     private val processQueryService: ProcessQueryService,
     private val nodeSynchronizationService: NodeSynchronizationService,
@@ -30,7 +29,6 @@ class ControlVerticle(
         nodeId = NodeId((vertx as VertxImpl).nodeID)
         CompositeFuture.join(startHttpServer(), engineService.startEngines(vertx, config.engineNo, nodeId))
             .onSuccess {
-                engineHealthCheckService.startHealthChecks(nodeId, vertx, config.engineNo, engineService)
                 nodeSynchronizationService.subscribeNodeExistence(vertx)
                 nodeSynchronizationService.listenToWaitingProcesses(vertx, engineService, nodeId)
                 startPromise.complete()

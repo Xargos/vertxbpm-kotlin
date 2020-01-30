@@ -1,27 +1,16 @@
 package process
 
-import de.huxhorn.sulky.ulid.ULID
 import io.mockk.every
 import io.mockk.mockk
-import io.vertx.core.AsyncResult
-import io.vertx.core.Vertx
-import io.vertx.core.VertxOptions
-import io.vertx.core.spi.cluster.ClusterManager
-import io.vertx.spi.cluster.ignite.IgniteClusterManager
-import org.apache.ignite.Ignition
 import org.jetbrains.spek.api.Spek
 import org.jetbrains.spek.api.dsl.describe
 import org.jetbrains.spek.api.dsl.given
 import org.jetbrains.spek.api.dsl.it
 import org.jetbrains.spek.api.dsl.on
 import org.junit.jupiter.api.Assertions.assertEquals
-import process.control.*
 import process.engine.Repository
 import process.engine.Workflow
-import process.engine.WorkflowEngineFactory
-import process.engine.WorkflowStore
-import process.infrastructure.IgniteRepository
-import kotlin.system.exitProcess
+import process.verticles.ControlVerticle
 
 
 class FirstSpec : Spek({
