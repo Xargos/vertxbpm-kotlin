@@ -3,8 +3,8 @@ package process.engine
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.ext.web.RoutingContext
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+
+data class Statistics(val processCount: Int, val activeProcessCount: Int, val finishedProcessesCount: Int)
 
 class ProcessQueryService(
     private val repository: Repository
@@ -53,37 +53,22 @@ class ProcessQueryService(
         }
     }
 
-    fun getProcessesCount(): Future<Int> {
-        val promise = Promise.promise<Int>()
-        GlobalScope.launch {
-            try {
-                val count = repository.retrieveAllProcesses().count()
-                promise.complete(count)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                promise.fail(e)
-            }
-        }
-        return promise.future()
-    }
-
-    fun getActiveProcessesCount(): Future<Int> {
-        val promise = Promise.promise<Int>()
+    fun getStatistics(): Future<Statistics> {
+        val promise = Promise.promise<Statistics>()
         try {
-            val count = repository.retrieveAllProcesses()
-                .filter { !it.ended }
-                .count()
-            promise.complete(count)
+            val allProcesses = repository.retrieveAllProcesses()
+
+            val statistics = Statistics(
+                processCount = allProcesses.count(),
+                activeProcessCount = allProcesses.filter { !it.ended }.count(),
+                finishedProcessesCount = allProcesses.filter { it.ended }.count()
+            )
+
+            promise.complete(statistics)
         } catch (e: Exception) {
             e.printStackTrace()
             promise.fail(e)
         }
         return promise.future()
-    }
-
-    fun getTotalFinishedProcesses(): Int {
-        return repository.retrieveAllProcesses()
-            .filter { it.ended }
-            .count()
     }
 }

@@ -16,7 +16,6 @@ import javax.cache.Cache
 //  Make all async.
 //  When cleaning up dead nodes remove also all the engines and processes mappings.!
 class IgniteRepository(
-    private val nodeId: NodeId,
     processesCacheName: String,
     nodesCacheName: String,
     waitProcessesQueueName: String,
@@ -31,12 +30,14 @@ class IgniteRepository(
         0,
         CollectionConfiguration()
     )
+    private lateinit var nodeId: NodeId
 
     private val newProcesses: MutableList<Pair<ProcessId, Promise<Void>>> = mutableListOf()
     private val newContexts: MutableList<Pair<FlowContext<Any>, Promise<FlowContext<Any>>>> = mutableListOf()
     private val pendingProcessesToSave: MutableList<Pair<FlowContext<Any>, Promise<Void>>> = mutableListOf()
 
-    override fun init(vertx: Vertx): Future<Void> {
+    override fun init(vertx: Vertx, nodeId: NodeId): Future<Void> {
+        this.nodeId = nodeId
         nodesCache.putIfAbsentAsync(nodeId, setOf())
         runBatchUpload(vertx)
         return Future.succeededFuture()

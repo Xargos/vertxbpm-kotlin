@@ -32,7 +32,7 @@ class NodeSynchronizationService(private val repository: Repository) {
             vertx.executeBlocking<Void>(
                 { promise ->
                     repository.getAndExecuteWaitingProcess {
-                        engineService.startProcess(nodeId, it.workflowName, "", vertx.eventBus(), it.processId.value)
+                        engineService.startProcess(it.workflowName, "", vertx, it.processId)
                             .compose { Future.succeededFuture<Void>() }
                     }
                         .setHandler(promise::handle)

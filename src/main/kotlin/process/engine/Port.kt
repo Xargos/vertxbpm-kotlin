@@ -5,7 +5,7 @@ import io.vertx.core.Vertx
 
 
 interface Repository {
-    fun init(vertx: Vertx): Future<Void>
+    fun init(vertx: Vertx, nodeId: NodeId): Future<Void>
     fun <T> saveProcess(flowContext: FlowContext<T>): Future<Void>
     fun <T> getOrCreateProcess(flowContext: FlowContext<T>): Future<FlowContext<T>>
     fun retrieveAllProcesses(): List<FlowContext<Any>>
