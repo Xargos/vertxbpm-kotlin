@@ -19,6 +19,7 @@ class EventBusVerticle(
     private val processQueryService: ProcessQueryService
 ) : AbstractVerticle() {
     override fun start(startPromise: Promise<Void>) {
+        println(this.vertx.deploymentIDs())
 
         val eventBus = vertx.eventBus()
         eventBus.consumer<String>(config.startProcessTopicAddress) { startProcess(it) }

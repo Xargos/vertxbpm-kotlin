@@ -23,12 +23,12 @@ class IgniteRepository(
 ) : Repository {
 
     private val transactions = ignite.transactions()
-    private val processesCache = ignite.createCache<ProcessId, FlowContext<Any>>(processesCacheName)
-    private val nodesCache = ignite.createCache<NodeId, Set<ProcessId>>(nodesCacheName)
+    private val processesCache = ignite.getOrCreateCache<ProcessId, FlowContext<Any>>(processesCacheName)
+    private val nodesCache = ignite.getOrCreateCache<NodeId, Set<ProcessId>>(nodesCacheName)
     private val waitProcessesQueue = ignite.queue<FlowContext<Any>>(
         waitProcessesQueueName,
         0,
-        CollectionConfiguration()
+        CollectionConfiguration().setBackups(2)
     )
     private lateinit var nodeId: NodeId
 

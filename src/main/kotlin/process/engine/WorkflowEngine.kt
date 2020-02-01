@@ -29,6 +29,7 @@ class WorkflowEngine(
             }
             .onFailure {
                 it.printStackTrace()
+                repository.saveProcess(flowContext.copy(ended = true))
                 promise.fail(it)
             }
 //            .onSuccess { println("Success") }
@@ -58,30 +59,34 @@ class WorkflowEngine(
         flowContext: FlowContext<T>,
         data: T
     ): Future<Void> {
-        return when (step) {
-            is Step.End -> {
-                repository.saveProcess(flowContext.copy(ended = true))
+        return try {
+            when (step) {
+                is Step.End -> {
+                    repository.saveProcess(flowContext.copy(ended = true))
+                }
+                is Step.Start -> {
+                    repository.saveProcess(flowContext)
+                        .compose {
+                            val nextStep = StepContext(step.next, data)
+                            this.execStep(
+                                steps,
+                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                            )
+                        }
+                }
+                is Step.Simple -> {
+                    repository.saveProcess(flowContext)
+                        .compose {
+                            val nextStep = StepContext(step.next, data)
+                            this.execStep(
+                                steps,
+                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                            )
+                        }
+                }
             }
-            is Step.Start -> {
-                repository.saveProcess(flowContext)
-                    .compose {
-                        val nextStep = StepContext(step.next, data)
-                        this.execStep(
-                            steps,
-                            flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                        )
-                    }
-            }
-            is Step.Simple -> {
-                repository.saveProcess(flowContext)
-                    .compose {
-                        val nextStep = StepContext(step.next, data)
-                        this.execStep(
-                            steps,
-                            flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                        )
-                    }
-            }
+        } catch (e: Exception) {
+            Future.failedFuture<Void>(e)
         }
     }
 }
