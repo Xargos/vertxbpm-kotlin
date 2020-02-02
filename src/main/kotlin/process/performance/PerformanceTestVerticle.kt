@@ -6,11 +6,9 @@ import io.vertx.core.CompositeFuture
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.eventbus.DeliveryOptions
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import process.engine.Statistics
 
-const val jobNo: Int = 100
+const val jobNo: Int = 50
 const val speed = 10L
 const val repetitions: Int = 100
 
@@ -29,9 +27,8 @@ class PerformanceTestVerticle(
             val start = System.nanoTime()
             CompositeFuture.join((1..jobNo).map {
                 val promise = Promise.promise<Void>()
-//                GlobalScope.launch {
-                    counter++
-                    eventBus.send("start_process", "", deliveryOptions)
+                counter++
+                eventBus.send("start_process", "", deliveryOptions)
 //                    { response ->
 //                        if (response.failed()) {
 //                            promise.fail(response.cause())
@@ -39,7 +36,6 @@ class PerformanceTestVerticle(
 //                            promise.complete()
 //                        }
 //                    }
-//                }
                 promise.complete()
                 promise.future()
             })

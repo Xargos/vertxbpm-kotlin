@@ -10,24 +10,36 @@ import io.vertx.junit5.VertxTestContext
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import process.testWorkflow
 
 @ExtendWith(VertxExtension::class)
 class EngineTest {
 
     private val processId = ProcessId(value = "Test")
-    private val exception = Exception("Test")
 
     @Test
-    fun `Given single succeeding step workflow engine should call the step and complete the process`(testContext: VertxTestContext) {
+    fun `Given missing step in workflow then engine should throw exception and finish process`(testContext: VertxTestContext) {
         // GIVEN
-        val stepExecuted = testContext.checkpoint()
-        val processCompleted = testContext.checkpoint()
+        val processCompleted = testContext.checkpoint(2)
         val processDispatched = testContext.checkpoint()
+        val exceptionRecorded = testContext.checkpoint()
         val repository = testRepository<String>(processCompleted)
-        val workflow = testWorkflow {
-            stepExecuted.flag()
-            Future.succeededFuture(it)
+        val slot = slot<FlowContext<String>>()
+        every { repository.finishProcess(flowContext = capture(slot)) } answers {
+            if (slot.captured.ended) {
+                testContext.verify {
+                    assertThat(slot.captured.exception).isNotNull().isInstanceOfAny(RuntimeException::class.java)
+                    exceptionRecorded.flag()
+                }
+            }
+            processCompleted.flag()
+            Future.succeededFuture()
         }
+        val singleStep = Step.End<String>(StepName("start")) { Future.succeededFuture() }
+        val workflow = testWorkflow(
+            startNode = StepName("missing step"),
+            steps = listOf(singleStep)
+        )
         val engine = Engine(repository)
         val emptyData = ""
 
@@ -43,21 +55,23 @@ class EngineTest {
     ) {
         // GIVEN
         val stepExecuted = testContext.checkpoint()
-        val processCompleted = testContext.checkpoint()
+        val processCompleted = testContext.checkpoint(2)
         val exceptionRecorded = testContext.checkpoint()
         val processDispatched = testContext.checkpoint()
         val repository = testRepository<String>(processCompleted)
         val slot = slot<FlowContext<String>>()
-        every { repository.saveProcess(flowContext = capture(slot)) } answers {
+        val exception = Exception("Test")
+        every { repository.finishProcess(flowContext = capture(slot)) } answers {
             if (slot.captured.ended) {
                 testContext.verify {
                     assertThat(slot.captured.exception).isNotNull().isEqualTo(exception)
                     exceptionRecorded.flag()
                 }
             }
+            processCompleted.flag()
             Future.succeededFuture()
         }
-        val workflow = testWorkflow {
+        val workflow = singleStepWorkflow {
             stepExecuted.flag()
             throw exception
         }
@@ -74,7 +88,7 @@ class EngineTest {
     fun `Given multiple succeeding step workflow engine should call each step and complete the process`(testContext: VertxTestContext) {
         // GIVEN
         val stepsExecuted = testContext.checkpoint(3)
-        val processCompleted = testContext.checkpoint()
+        val processCompleted = testContext.checkpoint(2)
         val processDispatched = testContext.checkpoint()
         val repository = testRepository<String>(processCompleted)
         val step: (data: String) -> Future<String> = {
@@ -103,23 +117,16 @@ class EngineTest {
         val slot = slot<FlowContext<T>>()
         every { repository.getOrCreateProcess(flowContext = capture(slot)) } answers { Future.succeededFuture(slot.captured) }
         every { repository.saveProcess(any<FlowContext<T>>()) } answers { Future.succeededFuture() }
+        every { repository.finishProcess(any<FlowContext<T>>()) } answers { processCompleted.flag(); Future.succeededFuture() }
         every { repository.removeProcessFromEngine(processId) } answers { processCompleted.flag(); Future.succeededFuture() }
         return repository
     }
 
-    private fun testWorkflow(step: (data: String) -> Future<String>): Workflow<String> {
+    private fun singleStepWorkflow(step: (data: String) -> Future<String>): Workflow<Any> {
         val singleStep = Step.End<String>(StepName("start")) { step.invoke(it) }
         return testWorkflow(
             startNode = singleStep.name,
             steps = listOf(singleStep)
         )
-    }
-
-    private fun testWorkflow(startNode: StepName, steps: List<Step<String>>): Workflow<String> {
-        return Workflow(
-            name = "SimpleWorkflow",
-            startNode = startNode,
-            steps = steps.associateBy({ it.name }, { it }),
-            decodeData = { it ?: "" })
     }
 }

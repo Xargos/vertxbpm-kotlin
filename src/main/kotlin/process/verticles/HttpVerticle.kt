@@ -1,20 +1,56 @@
 package process.verticles
 
+import de.huxhorn.sulky.ulid.ULID
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.http.HttpMethod
+import io.vertx.core.json.Json
+import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
-import process.engine.EngineService
-import process.engine.ProcessQueryService
+import org.apache.ignite.Ignite
+import process.engine.*
+import process.infrastructure.IgniteRepository
 import java.io.Serializable
 
 data class HttpConfig(val port: Int) : Serializable
 
+fun buildHttpVerticle(
+    workflows: Map<String, Workflow<Any>>,
+    ignite: Ignite,
+    clusterManager: ClusterManager
+): HttpVerticle {
+    val ulid = ULID()
+    val igniteRepository = IgniteRepository(
+        waitProcessesQueueName = "waitProcessesQueue",
+        finishedProcessesCacheName = "finishedProcesses",
+        processesCacheName = "processes",
+        nodesCacheName = "nodes",
+        ignite = ignite
+    )
+    val processQueryService = ProcessQueryService(igniteRepository)
+    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
+    val engineService = EngineService(
+        engine = Engine(igniteRepository),
+        nodeSynchronizationService = nodeSynchronizationService,
+        workflowStore = WorkflowStore(workflows),
+        ulid = ulid,
+        repository = igniteRepository,
+        clusterManager = clusterManager
+    )
+    val httpConfig = HttpConfig(8080)
+    return HttpVerticle(
+        engineService = engineService,
+        processQueryService = processQueryService,
+        config = httpConfig
+    )
+}
+
 class HttpVerticle(
     private val engineService: EngineService,
     private val processQueryService: ProcessQueryService,
-    private val httpConfig: HttpConfig
+    private val config: HttpConfig
 ) : AbstractVerticle() {
 
     override fun start(startPromise: Promise<Void>) {
@@ -31,25 +67,15 @@ class HttpVerticle(
 
         val router = Router.router(vertx)
 
-        router.route("/workflow/:workflowName").handler { startProcess(it) }
+        router.route(HttpMethod.POST, "/workflow/:workflowName").handler { startProcess(it) }
 
-        router.route("/processes/:processId").handler(processQueryService::getProcess)
-        router.route("/statistics/count").handler { routingContext ->
-            processQueryService.getStatistics()
-                .onSuccess {
-                    val response = routingContext.response()
-                    response.putHeader("content-type", "text/plain")
-                    response.end("$it")
-                }
-                .onFailure {
-                    routingContext.fail(it.cause)
-                }
-        }
-        router.route("/processes/").handler(processQueryService::getProcesses)
+        router.route("/processes/:processId").handler { getProcess(it) }
+        router.route("/processes/").handler { getProcesses(it) }
+        router.route("/statistics/").handler { getStatistics(it) }
         val serverStart = Promise.promise<Void>()
         server
             .requestHandler(router)
-            .listen(httpConfig.port)
+            .listen(config.port)
         serverStart.complete()
 //            .onSuccess {
 //                println("Server is Up")
@@ -64,18 +90,35 @@ class HttpVerticle(
         return serverStart.future()
     }
 
-    private fun startProcess(it: RoutingContext) {
-        val workflowName = it.pathParam("workflowName")
-        engineService.startProcess(workflowName, it.bodyAsString ?: "")
-            .setHandler { it1 ->
-                if (it1.failed()) {
-                    it1.cause().printStackTrace()
-                    it.fail(it1.cause())
-                } else {
-                    val response = it.response()
-                    response.putHeader("content-type", "text/plain")
-                    response.end("Execute workflow! ProcessId: ${it1.result()}")
-                }
-            }
+    private fun getProcess(routingContext: RoutingContext) {
+        val processId = ProcessId(routingContext.pathParam("processId"))
+        processQueryService.getProcess<Any>(processId)
+            .onSuccess { sendResponse(routingContext, it) }
+            .onFailure { routingContext.fail(it) }
+    }
+
+    private fun getProcesses(routingContext: RoutingContext) {
+        processQueryService.getProcesses()
+            .onSuccess { sendResponse(routingContext, it) }
+            .onFailure { routingContext.fail(it) }
+    }
+
+    private fun getStatistics(routingContext: RoutingContext) {
+        processQueryService.getStatistics()
+            .onSuccess { sendResponse(routingContext, it) }
+            .onFailure { routingContext.fail(it) }
+    }
+
+    private fun startProcess(routingContext: RoutingContext) {
+        val workflowName = routingContext.pathParam("workflowName")
+        engineService.startProcess(workflowName, routingContext.bodyAsString ?: "")
+            .onSuccess { sendResponse(routingContext, it) }
+            .onFailure { routingContext.fail(it) }
+    }
+
+    private fun <R> sendResponse(routingContext: RoutingContext, it: R) {
+        val response = routingContext.response()
+        response.putHeader("content-type", "application/json")
+        response.end(Json.encode(it))
     }
 }

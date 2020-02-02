@@ -1,17 +1,16 @@
 package process
 
-import de.huxhorn.sulky.ulid.ULID
 import io.vertx.core.AsyncResult
+import io.vertx.core.DeploymentOptions
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
 import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.spi.cluster.ignite.IgniteClusterManager
-import org.apache.ignite.Ignite
 import org.apache.ignite.Ignition
-import process.engine.*
-import process.infrastructure.IgniteRepository
-import process.verticles.EventBusConfig
-import process.verticles.EventBusVerticle
+import org.apache.ignite.cache.CacheMode
+import org.apache.ignite.configuration.CacheConfiguration
+import process.engine.Workflow
+import process.verticles.buildEventBusVerticle
 import kotlin.system.exitProcess
 
 
@@ -22,21 +21,31 @@ fun main() {
 
     Ignition.start()
     val ignite = Ignition.ignite()
+    val cacheConfiguration = CacheConfiguration<Any, Any>(IgniteClusterManager.VERTX_CACHE_TEMPLATE_NAME)
+        .setBackups(2)
+        .setCacheMode(CacheMode.REPLICATED)
+//        .setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL)
+    ignite.addCacheConfiguration(cacheConfiguration)
     val clusterManager: ClusterManager = IgniteClusterManager(ignite)
 
-    val options = VertxOptions().setClusterManager(clusterManager)
+    val options = VertxOptions()
+        .setClusterManager(clusterManager)
+        .setHAEnabled(true)
+    val deploymentOptions = DeploymentOptions()
+        .setHa(true)
     Vertx.clusteredVertx(options) { res: AsyncResult<Vertx?> ->
         if (res.succeeded()) {
             (1..2).forEach {
-                res.result()?.deployVerticle(buildEventBusVerticle(workflows, ignite)) {
-                    if (it.failed()) {
-                        println("Startup failed")
-                        it.cause().printStackTrace()
-                        exitProcess(-1)
-                    } else {
-                        println("Startup finished successfully")
+                res.result()
+                    ?.deployVerticle(buildEventBusVerticle(workflows, ignite, clusterManager), deploymentOptions) {
+                        if (it.failed()) {
+                            println("Startup failed")
+                            it.cause().printStackTrace()
+                            exitProcess(-1)
+                        } else {
+                            println("Startup finished successfully")
+                        }
                     }
-                }
             }
         } else { // failed!
             throw res.cause()
@@ -44,30 +53,3 @@ fun main() {
     }
 }
 
-private fun buildEventBusVerticle(
-    workflows: Map<String, Workflow<Any>>,
-    ignite: Ignite
-): EventBusVerticle {
-    val ulid = ULID()
-    val igniteRepository = IgniteRepository(
-        waitProcessesQueueName = "waitProcessesQueue",
-        processesCacheName = "processes",
-        nodesCacheName = "nodes",
-        ignite = ignite
-    )
-    val processQueryService = ProcessQueryService(igniteRepository)
-    val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
-    val engineService = EngineService(
-        engine = Engine(igniteRepository),
-        nodeSynchronizationService = nodeSynchronizationService,
-        workflowStore = WorkflowStore(workflows),
-        ulid = ulid,
-        repository = igniteRepository
-    )
-    val eventBusConfig = EventBusConfig("start_process", "statistics")
-    return EventBusVerticle(
-        engineService = engineService,
-        processQueryService = processQueryService,
-        config = eventBusConfig
-    )
-}

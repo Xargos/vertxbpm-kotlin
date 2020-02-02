@@ -3,7 +3,7 @@ package process.engine
 import de.huxhorn.sulky.ulid.ULID
 import io.vertx.core.Future
 import io.vertx.core.Vertx
-import io.vertx.core.impl.VertxImpl
+import io.vertx.core.spi.cluster.ClusterManager
 import java.io.Serializable
 
 data class NodeId(val value: String) : Serializable
@@ -14,13 +14,14 @@ class EngineService(
     private val workflowStore: WorkflowStore,
     private val nodeSynchronizationService: NodeSynchronizationService,
     private val ulid: ULID,
-    private val repository: Repository
+    private val repository: Repository,
+    private val clusterManager: ClusterManager
 ) {
 
     fun start(vertx: Vertx) {
-        val nodeId = NodeId((vertx as VertxImpl).nodeID)
+        val nodeId = NodeId(clusterManager.nodeID)
         repository.init(vertx, nodeId)
-        nodeSynchronizationService.subscribeNodeExistence(vertx)
+        nodeSynchronizationService.subscribeNodeExistence(clusterManager)
         nodeSynchronizationService.listenToWaitingProcesses(vertx, this, nodeId)
     }
 

@@ -26,11 +26,10 @@ class Engine(
             }
             .onFailure {
                 it.printStackTrace()
-                repository.saveProcess(flowContext.copy(ended = true, exception = it))
+                repository.finishProcess(flowContext.copy(ended = true, exception = it))
                 promise.tryFail(it)
             }
             .onComplete { repository.removeProcessFromEngine(processId) }
-//            .onSuccess { println("Success") }
         return promise.future()
     }
 
@@ -60,7 +59,7 @@ class Engine(
         return try {
             when (step) {
                 is Step.End -> {
-                    repository.saveProcess(flowContext.copy(ended = true))
+                    repository.finishProcess(flowContext.copy(ended = true))
                 }
                 is Step.Simple -> {
                     repository.saveProcess(flowContext)

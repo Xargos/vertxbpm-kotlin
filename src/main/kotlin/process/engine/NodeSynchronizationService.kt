@@ -2,7 +2,7 @@ package process.engine
 
 import io.vertx.core.Future
 import io.vertx.core.Vertx
-import io.vertx.core.impl.VertxImpl
+import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.core.spi.cluster.NodeListener
 
 
@@ -18,13 +18,8 @@ class NodeSynchronizationService(private val repository: Repository) {
         }
     }
 
-    fun subscribeNodeExistence(vertx: Vertx) {
-        val v: VertxImpl = vertx as VertxImpl
-        v.clusterManager.nodeListener(
-            HealthCheck(
-                repository
-            )
-        )
+    fun subscribeNodeExistence(clusterManager: ClusterManager) {
+        clusterManager.nodeListener(HealthCheck(repository))
     }
 
     fun listenToWaitingProcesses(vertx: Vertx, engineService: EngineService, nodeId: NodeId) {
