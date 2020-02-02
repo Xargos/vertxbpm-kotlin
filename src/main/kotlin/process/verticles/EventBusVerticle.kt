@@ -32,7 +32,7 @@ class EventBusVerticle(
 
     private fun startProcess(message: Message<String>) {
         val workflowName = message.headers()["workflowName"]
-        engineService.startProcess(workflowName, message.body(), vertx)
+        engineService.startProcess(workflowName, message.body())
             .onSuccess { message.reply(it.value) }
             .onFailure { message.fail(-1, it.cause?.message) }
     }

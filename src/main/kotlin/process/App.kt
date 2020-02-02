@@ -3,7 +3,7 @@ package process
 
 //fun main() {
 //
-//    val simpleWorkflow = SimpleWorkflow()
+//    val simpleWorkflow = simpleWorkflow()
 //    val workflows = mapOf(simpleWorkflow.name() to (simpleWorkflow as Workflow<Any>))
 //
 //    val clusterManager: ClusterManager = IgniteClusterManager()

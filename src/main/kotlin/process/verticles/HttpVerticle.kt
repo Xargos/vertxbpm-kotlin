@@ -66,7 +66,7 @@ class HttpVerticle(
 
     private fun startProcess(it: RoutingContext) {
         val workflowName = it.pathParam("workflowName")
-        engineService.startProcess(workflowName, it.bodyAsString ?: "", vertx)
+        engineService.startProcess(workflowName, it.bodyAsString ?: "")
             .setHandler { it1 ->
                 if (it1.failed()) {
                     it1.cause().printStackTrace()

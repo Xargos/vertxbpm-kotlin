@@ -2,36 +2,34 @@ package process.engine
 
 import io.vertx.core.Future
 import io.vertx.core.Promise.promise
-import io.vertx.core.Vertx
 import java.io.Serializable
 
 data class ProcessId(val value: String) : Serializable
 
-class WorkflowEngine(
+class Engine(
     private val repository: Repository
 ) {
 
     fun <T> start(
         workflow: Workflow<T>,
-        vertx: Vertx,
         inputData: T,
         processId: ProcessId
     ): Future<Void> {
         val promise = promise<Void>()
-        val firstStep = StepContext(workflow.startNode(), inputData)
-        val flowContext = FlowContext(workflow.name(), processId, firstStep, listOf(firstStep))
+        val firstStep = StepContext(workflow.startNode, inputData)
+        val flowContext = FlowContext(workflow.name, processId, firstStep, listOf(firstStep))
         repository.startNewProcess(processId)
             .compose { repository.getOrCreateProcess(flowContext) }
             .compose {
                 promise.complete()
-                this.execStep(workflow.steps(vertx), (it ?: flowContext))
-                    .compose { repository.removeProcessFromEngine(processId) }
+                this.execStep(workflow.steps, (it ?: flowContext))
             }
             .onFailure {
                 it.printStackTrace()
-                repository.saveProcess(flowContext.copy(ended = true))
-                promise.fail(it)
+                repository.saveProcess(flowContext.copy(ended = true, exception = it))
+                promise.tryFail(it)
             }
+            .onComplete { repository.removeProcessFromEngine(processId) }
 //            .onSuccess { println("Success") }
         return promise.future()
     }
@@ -49,7 +47,7 @@ class WorkflowEngine(
                 Future.failedFuture(RuntimeException("No step"))
             }
         } catch (e: Exception) {
-            Future.failedFuture<Void>(e)
+            Future.failedFuture(e)
         }
     }
 
@@ -63,16 +61,6 @@ class WorkflowEngine(
             when (step) {
                 is Step.End -> {
                     repository.saveProcess(flowContext.copy(ended = true))
-                }
-                is Step.Start -> {
-                    repository.saveProcess(flowContext)
-                        .compose {
-                            val nextStep = StepContext(step.next, data)
-                            this.execStep(
-                                steps,
-                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                            )
-                        }
                 }
                 is Step.Simple -> {
                     repository.saveProcess(flowContext)

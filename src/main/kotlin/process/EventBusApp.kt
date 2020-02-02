@@ -17,8 +17,8 @@ import kotlin.system.exitProcess
 
 fun main() {
 
-    val simpleWorkflow = SimpleWorkflow()
-    val workflows = mapOf(simpleWorkflow.name() to (simpleWorkflow as Workflow<Any>))
+    val simpleWorkflow = simpleWorkflow()
+    val workflows = mapOf(simpleWorkflow.name to (simpleWorkflow as Workflow<Any>))
 
     Ignition.start()
     val ignite = Ignition.ignite()
@@ -58,7 +58,7 @@ private fun buildEventBusVerticle(
     val processQueryService = ProcessQueryService(igniteRepository)
     val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
     val engineService = EngineService(
-        workflowEngine = WorkflowEngine(igniteRepository),
+        engine = Engine(igniteRepository),
         nodeSynchronizationService = nodeSynchronizationService,
         workflowStore = WorkflowStore(workflows),
         ulid = ulid,

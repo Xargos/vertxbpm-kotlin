@@ -10,7 +10,7 @@ data class NodeId(val value: String) : Serializable
 
 
 class EngineService(
-    private val workflowEngine: WorkflowEngine,
+    private val engine: Engine,
     private val workflowStore: WorkflowStore,
     private val nodeSynchronizationService: NodeSynchronizationService,
     private val ulid: ULID,
@@ -27,13 +27,12 @@ class EngineService(
     fun startProcess(
         workflowName: String,
         body: String,
-        vertx: Vertx,
         processId: ProcessId = ProcessId(ulid.nextULID())
     ): Future<ProcessId> {
         val workflow =
             workflowStore.workflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName")
         val data = workflow.decodeData(body)
-        return workflowEngine.start(workflow, vertx, data, processId)
+        return engine.start(workflow, data, processId)
             .compose { Future.succeededFuture(processId) }
     }
 }
