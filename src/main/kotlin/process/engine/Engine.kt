@@ -40,7 +40,7 @@ class Engine(
         return try {
             if (steps.containsKey(flowContext.currentStep.stepName)) {
                 val step: Step<T> = steps.getValue(flowContext.currentStep.stepName)
-                step.exec.invoke(flowContext.currentStep.data)
+                step.exec(flowContext.currentStep.data)
                     .compose { next(steps, step, flowContext, it) }
             } else {
                 Future.failedFuture(RuntimeException("No step"))
@@ -65,6 +65,17 @@ class Engine(
                     repository.saveProcess(flowContext)
                         .compose {
                             val nextStep = StepContext(step.next, data)
+                            this.execStep(
+                                steps,
+                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                            )
+                        }
+                }
+                is Step.Choice -> {
+                    repository.saveProcess(flowContext)
+                        .compose { step.choose(data) }
+                        .compose {
+                            val nextStep = StepContext(it, data)
                             this.execStep(
                                 steps,
                                 flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))

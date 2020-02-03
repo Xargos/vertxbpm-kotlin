@@ -33,6 +33,13 @@ sealed class Step<T> {
         override val exec: (data: T) -> Future<T>
     ) : Step<T>()
 
+    class Choice<T>(
+        override val name: StepName,
+        val next: Set<StepName>,
+        override val exec: (data: T) -> Future<T> = { Future.succeededFuture(it) },
+        val choose: (data: T) -> Future<StepName>
+    ) : Step<T>()
+
     class End<T>(
         override val name: StepName,
         override val exec: (data: T) -> Future<T>

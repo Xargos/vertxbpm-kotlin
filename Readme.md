@@ -7,7 +7,7 @@ Right now this is a very simple engine whose workflows can only be executed usin
 
 To Do:
 - Add basic HttpVerticle performance tests.
-- Add choice capability to the workflows and engine.
+- ~~Add choice capability to the workflows and engine.~~
 - Test performance using enabled Ignite persistance.
 - Add workflow steps that wait for user input.
 - Add self-healing when local verticle fails.

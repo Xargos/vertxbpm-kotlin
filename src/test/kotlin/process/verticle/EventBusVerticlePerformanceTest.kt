@@ -32,7 +32,7 @@ class EventBusVerticlePerformanceTest {
     ) {
         val statisticsCorrect = testContext.checkpoint()
         val step: (data: String) -> Future<String> = { Future.succeededFuture(it) }
-        val singleStep = Step.End<String>(StepName("start")) { step.invoke(it) }
+        val singleStep = Step.End<String>(StepName("start")) { step(it) }
         val workflow = testWorkflow(
             startNode = singleStep.name,
             steps = listOf(singleStep)

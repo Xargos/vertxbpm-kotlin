@@ -332,7 +332,7 @@ class IgniteRepository(
             try {
                 val flowContext = waitProcessesQueue.poll()
                 if (flowContext != null) {
-                    exec.invoke(flowContext)
+                    exec(flowContext)
                         .onFailure {
                             tx.rollback()
                             promise.fail(it)

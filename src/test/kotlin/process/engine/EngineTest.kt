@@ -87,7 +87,7 @@ class EngineTest {
     @Test
     fun `Given multiple succeeding step workflow engine should call each step and complete the process`(testContext: VertxTestContext) {
         // GIVEN
-        val stepsExecuted = testContext.checkpoint(3)
+        val stepsExecuted = testContext.checkpoint(4)
         val processCompleted = testContext.checkpoint(2)
         val processDispatched = testContext.checkpoint()
         val repository = testRepository<String>(processCompleted)
@@ -95,12 +95,17 @@ class EngineTest {
             stepsExecuted.flag()
             Future.succeededFuture(it)
         }
-        val startStep = Step.Simple<String>(StepName("start"), StepName("step")) { step.invoke(it) }
+        val startStep = Step.Simple<String>(StepName("start"), StepName("step1")) { step(it) }
         val workflow = testWorkflow(
             startNode = startStep.name,
             steps = listOf(startStep,
-                Step.Simple(StepName("step"), StepName("end")) { step.invoke(it) },
-                Step.End(StepName("end")) { step.invoke(it) })
+                Step.Choice(StepName("step1"), setOf(StepName("step2"), StepName("step3"))) {
+                    stepsExecuted.flag()
+                    Future.succeededFuture(StepName("step2"))
+                },
+                Step.Simple(StepName("step2"), StepName("end")) { step(it) },
+                Step.Simple(StepName("step3"), StepName("end")) { step(it) },
+                Step.End(StepName("end")) { step(it) })
         )
         val engine = Engine(repository)
         val emptyData = ""
@@ -123,7 +128,7 @@ class EngineTest {
     }
 
     private fun singleStepWorkflow(step: (data: String) -> Future<String>): Workflow<Any> {
-        val singleStep = Step.End<String>(StepName("start")) { step.invoke(it) }
+        val singleStep = Step.End<String>(StepName("start")) { step(it) }
         return testWorkflow(
             startNode = singleStep.name,
             steps = listOf(singleStep)
