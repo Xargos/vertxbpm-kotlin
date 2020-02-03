@@ -33,6 +33,12 @@ sealed class Step<T> {
         override val exec: (data: T) -> Future<T>
     ) : Step<T>()
 
+    class NoSave<T>(
+        override val name: StepName,
+        val next: StepName,
+        override val exec: (data: T) -> Future<T>
+    ) : Step<T>()
+
     class Choice<T>(
         override val name: StepName,
         val next: Set<StepName>,

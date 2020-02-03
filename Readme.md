@@ -12,7 +12,7 @@ To Do:
 - Add workflow steps that wait for user input.
 - Add self-healing when local verticle fails.
 - Add static analysis tools.
-- Add process execution without saving steps.
+- ~~Add process execution without saving steps.~~
 - Fix logging
 - Make it more configurable
 - Add process visualisation (dashboard)

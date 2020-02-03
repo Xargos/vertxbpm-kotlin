@@ -62,25 +62,27 @@ class Engine(
                     repository.finishProcess(flowContext.copy(ended = true))
                 }
                 is Step.Standard -> {
-                    repository.saveProcess(flowContext)
-                        .compose {
-                            val nextStep = StepContext(step.next, data)
-                            this.execStep(
-                                steps,
-                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                            )
-                        }
+                    val nextStep = StepContext(step.next, data)
+                    val newfc = flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                    repository.saveProcess(newfc)
+                        .compose { this.execStep(steps, newfc) }
                 }
                 is Step.Choice -> {
-                    repository.saveProcess(flowContext)
-                        .compose { step.choose(data) }
+                    step.choose(data)
                         .compose {
                             val nextStep = StepContext(it, data)
-                            this.execStep(
-                                steps,
+                            val newfc =
                                 flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                            )
+                            repository.saveProcess(newfc)
+                                .compose { this.execStep(steps, newfc) }
                         }
+                }
+                is Step.NoSave -> {
+                    val nextStep = StepContext(step.next, data)
+                    this.execStep(
+                        steps,
+                        flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                    )
                 }
             }
         } catch (e: Exception) {

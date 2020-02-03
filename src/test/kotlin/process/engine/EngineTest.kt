@@ -116,6 +116,35 @@ class EngineTest {
             .onFailure { testContext.failNow(it) }
     }
 
+    @Test
+    fun `Given workflow with no save step then workflow should execute but state should not be saved`(testContext: VertxTestContext) {
+        // GIVEN
+        val stepsExecuted = testContext.checkpoint(2)
+        val processCompleted = testContext.checkpoint(2)
+        val processDispatched = testContext.checkpoint()
+        val repository = testRepository<String>(processCompleted)
+        every { repository.saveProcess(any<FlowContext<Any>>()) } answers {
+            testContext.failNow(RuntimeException("Save should never be called"))
+            Future.succeededFuture()
+        }
+        val step: (data: String) -> Future<String> = {
+            stepsExecuted.flag()
+            Future.succeededFuture(it)
+        }
+        val startStep = Step.NoSave<String>(StepName("start"), StepName("end")) { step(it) }
+        val workflow = testWorkflow(
+            startNode = startStep.name,
+            steps = listOf(startStep, Step.End(StepName("end")) { step(it) })
+        )
+        val engine = Engine(repository)
+        val emptyData = ""
+
+        // WHEN
+        engine.start(workflow, emptyData, processId)
+            .onSuccess { processDispatched.flag() }
+            .onFailure { testContext.failNow(it) }
+    }
+
     private fun <T> testRepository(processCompleted: Checkpoint): Repository {
         val repository = mockk<Repository>()
         every { repository.startNewProcess(processId) } returns Future.succeededFuture()
