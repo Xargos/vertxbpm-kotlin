@@ -68,7 +68,7 @@ class Engine(
                     choiceStep(step, data, flowContext, steps)
                 }
                 is Step.NoSave -> {
-                    noSaveStep(step, data, steps, flowContext)
+                    noSaveStep(step, data, flowContext, steps)
                 }
             }
         } catch (e: Exception) {
@@ -79,8 +79,8 @@ class Engine(
     private fun <T> noSaveStep(
         step: Step.NoSave<T>,
         data: T,
-        steps: Map<StepName, Step<T>>,
-        flowContext: FlowContext<T>
+        flowContext: FlowContext<T>,
+        steps: Map<StepName, Step<T>>
     ): Future<Void> {
         val nextStep = StepContext(step.next, data)
         return this.execStep(
