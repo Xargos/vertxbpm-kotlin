@@ -62,31 +62,58 @@ class Engine(
                     repository.finishProcess(flowContext.copy(ended = true))
                 }
                 is Step.Standard -> {
-                    val nextStep = StepContext(step.next, data)
-                    val newfc = flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                    repository.saveProcess(newfc)
-                        .compose { this.execStep(steps, newfc) }
+                    standardStep(step, data, flowContext, steps)
                 }
                 is Step.Choice -> {
-                    step.choose(data)
-                        .compose {
-                            val nextStep = StepContext(it, data)
-                            val newfc =
-                                flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                            repository.saveProcess(newfc)
-                                .compose { this.execStep(steps, newfc) }
-                        }
+                    choiceStep(step, data, flowContext, steps)
                 }
                 is Step.NoSave -> {
-                    val nextStep = StepContext(step.next, data)
-                    this.execStep(
-                        steps,
-                        flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                    )
+                    noSaveStep(step, data, steps, flowContext)
                 }
             }
         } catch (e: Exception) {
             Future.failedFuture<Void>(e)
         }
+    }
+
+    private fun <T> noSaveStep(
+        step: Step.NoSave<T>,
+        data: T,
+        steps: Map<StepName, Step<T>>,
+        flowContext: FlowContext<T>
+    ): Future<Void> {
+        val nextStep = StepContext(step.next, data)
+        return this.execStep(
+            steps,
+            flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+        )
+    }
+
+    private fun <T> choiceStep(
+        step: Step.Choice<T>,
+        data: T,
+        flowContext: FlowContext<T>,
+        steps: Map<StepName, Step<T>>
+    ): Future<Void> {
+        return step.choose(data)
+            .compose {
+                val nextStep = StepContext(it, data)
+                val newfc =
+                    flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+                repository.saveProcess(newfc)
+                    .compose { this.execStep(steps, newfc) }
+            }
+    }
+
+    private fun <T> standardStep(
+        step: Step.Standard<T>,
+        data: T,
+        flowContext: FlowContext<T>,
+        steps: Map<StepName, Step<T>>
+    ): Future<Void> {
+        val nextStep = StepContext(step.next, data)
+        val newfc = flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
+        return repository.saveProcess(newfc)
+            .compose { this.execStep(steps, newfc) }
     }
 }
