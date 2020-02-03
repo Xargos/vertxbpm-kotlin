@@ -95,7 +95,7 @@ class EngineTest {
             stepsExecuted.flag()
             Future.succeededFuture(it)
         }
-        val startStep = Step.Simple<String>(StepName("start"), StepName("step1")) { step(it) }
+        val startStep = Step.Standard<String>(StepName("start"), StepName("step1")) { step(it) }
         val workflow = testWorkflow(
             startNode = startStep.name,
             steps = listOf(startStep,
@@ -103,8 +103,8 @@ class EngineTest {
                     stepsExecuted.flag()
                     Future.succeededFuture(StepName("step2"))
                 },
-                Step.Simple(StepName("step2"), StepName("end")) { step(it) },
-                Step.Simple(StepName("step3"), StepName("end")) { step(it) },
+                Step.Standard(StepName("step2"), StepName("end")) { step(it) },
+                Step.Standard(StepName("step3"), StepName("end")) { step(it) },
                 Step.End(StepName("end")) { step(it) })
         )
         val engine = Engine(repository)

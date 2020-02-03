@@ -61,7 +61,7 @@ class Engine(
                 is Step.End -> {
                     repository.finishProcess(flowContext.copy(ended = true))
                 }
-                is Step.Simple -> {
+                is Step.Standard -> {
                     repository.saveProcess(flowContext)
                         .compose {
                             val nextStep = StepContext(step.next, data)

@@ -24,13 +24,13 @@ private fun singleStep(): List<Step<String>> {
 
 private fun buildSteps(): List<Step<String>> {
     return listOf(
-        Step.Simple(
+        Step.Standard(
             StepName("start"),
             StepName("step")
         ) {
             Future.succeededFuture(it)
         },
-        Step.Simple(
+        Step.Standard(
             StepName("step"),
             StepName("end")
         ) { data ->

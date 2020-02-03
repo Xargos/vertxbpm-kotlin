@@ -27,7 +27,7 @@ sealed class Step<T> {
     abstract val name: StepName
     abstract val exec: (data: T) -> Future<T>
 
-    class Simple<T>(
+    class Standard<T>(
         override val name: StepName,
         val next: StepName,
         override val exec: (data: T) -> Future<T>

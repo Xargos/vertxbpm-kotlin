@@ -32,11 +32,11 @@ class EngineServiceTest {
             stepsExecuted.flag()
             Future.succeededFuture(it)
         }
-        val startStep = Step.Simple<String>(StepName("start"), StepName("step")) { step(it) }
+        val startStep = Step.Standard<String>(StepName("start"), StepName("step")) { step(it) }
         val workflow = testWorkflow(
             startNode = startStep.name,
             steps = listOf(startStep,
-                Step.Simple(StepName("step"), StepName("end")) { step(it) },
+                Step.Standard(StepName("step"), StepName("end")) { step(it) },
                 Step.End(StepName("end")) { step(it) })
         )
         val engineService = EngineService(
