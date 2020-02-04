@@ -4,6 +4,7 @@ import com.beust.klaxon.Klaxon
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.eventbus.DeliveryOptions
+import io.vertx.core.http.HttpClient
 import io.vertx.junit5.Checkpoint
 import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
@@ -17,13 +18,13 @@ import process.engine.Step
 import process.engine.StepName
 import process.startVerticle
 import process.testWorkflow
-import process.verticles.buildEventBusVerticle
+import process.verticles.buildHttpVerticle
 
 @ExtendWith(VertxExtension::class)
-class EventBusVerticleITest {
+class HttpVerticleITest {
 
     @Test
-    fun `Given event bus verticle engine when sent workflow then execute it`(
+    fun `Given http verticle engine when sent workflow post request then execute it`(
         vertx: Vertx,
         testContext: VertxTestContext
     ) {
@@ -41,19 +42,22 @@ class EventBusVerticleITest {
                 Step.End(StepName("end")) { step(it) })
         )
         val workflows = mapOf(Pair(workflow.name, workflow))
-        val deliveryOptions = DeliveryOptions()
-        deliveryOptions.addHeader("workflowName", workflow.name)
 
-        startVerticle { ignite, clusterManager -> buildEventBusVerticle(workflows, ignite, clusterManager)}
+        startVerticle { ignite, clusterManager -> buildHttpVerticle(workflows, ignite, clusterManager) }
             .onFailure { testContext.failNow(it) }
             .onSuccess { clusteredVertx ->
-                clusteredVertx.eventBus().request<String>("start_process", "", deliveryOptions) {
-                    if (it.failed()) {
-                        testContext.failNow(it.cause())
+                val httpClient = vertx.createHttpClient()
+                httpClient.post(8080, "localhost", "/workflow/${workflow.name}")
+                {
+                    if (it.statusCode() != 200) {
+                        testContext.failNow(Exception(it.statusMessage()))
                     } else {
-                        waitForProcessToFinish(clusteredVertx, testContext, statisticsCorrect)
+                        waitForProcessToFinish(clusteredVertx, testContext, statisticsCorrect, httpClient)
                     }
                 }
+                    .putHeader("Content-Length", "0")
+                    .write("")
+                    .end()
             }
     }
 
@@ -65,22 +69,25 @@ class EventBusVerticleITest {
     private fun waitForProcessToFinish(
         vertx: Vertx,
         testContext: VertxTestContext,
-        statisticsCorrect: Checkpoint
+        statisticsCorrect: Checkpoint,
+        httpClient: HttpClient
     ) {
         vertx.setTimer(1000) {
-            vertx.eventBus().request<String>("statistics", "") {
-                if (it.succeeded()) {
-                    testContext.verify {
-                        val statistics = Klaxon().parse<Statistics>(it.result().body())
+            httpClient.get(8080, "localhost", "/statistics/")
+            {
+                if (it.statusCode() != 200) {
+                    testContext.failNow(Exception(it.statusMessage()))
+                } else {
+                    it.bodyHandler { buffer ->
+                        val statistics = Klaxon().parse<Statistics>(buffer.toString())
                         assertThat(statistics?.activeProcessCount).isEqualTo(0)
                         assertThat(statistics?.processCount).isEqualTo(1)
                         assertThat(statistics?.finishedProcessesCount).isEqualTo(1)
                         statisticsCorrect.flag()
                     }
-                } else {
-                    testContext.failNow(it.cause())
                 }
             }
+                .end()
         }
     }
 }

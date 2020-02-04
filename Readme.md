@@ -6,7 +6,7 @@ This is achieved by implementing the engine using a clustered vertx backed by Ap
 Right now this is a very simple engine whose workflows can only be executed using one path and have their state always stored in Ignite cache.
 
 To Do:
-- Add basic HttpVerticle performance tests.
+- ~~Add basic HttpVerticle performance tests.~~
 - ~~Add choice capability to the workflows and engine.~~
 - Test performance using enabled Ignite persistance.
 - Add workflow steps that wait for user input.
