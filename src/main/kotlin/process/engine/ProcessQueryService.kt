@@ -5,19 +5,19 @@ import io.vertx.core.Future
 data class Statistics(val processCount: Int, val activeProcessCount: Int, val finishedProcessesCount: Int)
 
 class ProcessQueryService(
-    private val repository: Repository
+    private val workflowEngineRepository: WorkflowEngineRepository
 ) {
 
     fun <T> getProcess(processId: ProcessId): Future<FlowContext<T>?> {
-        return repository.getProcess(processId)
+        return workflowEngineRepository.getProcess(processId)
     }
 
     fun getProcesses(): Future<Set<FlowContext<Any>>> {
-        return repository.retrieveAllProcesses()
+        return workflowEngineRepository.retrieveAllProcesses()
     }
 
     fun getStatistics(): Future<Statistics> {
-        return repository.retrieveAllProcesses()
+        return workflowEngineRepository.retrieveAllProcesses()
             .compose { allProcesses ->
                 Future.succeededFuture(
                     Statistics(

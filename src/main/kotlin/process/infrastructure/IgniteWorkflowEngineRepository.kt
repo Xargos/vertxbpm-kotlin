@@ -1,5 +1,7 @@
 package process.infrastructure
 
+import process.engine.FlowContext
+import process.engine.StepContext
 import io.vertx.core.CompositeFuture
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -14,13 +16,13 @@ import javax.cache.Cache
 // TODO: Optimize stored data structure. Maybe additional indexes for restarting jobs.
 //  Make all async.
 //  When cleaning up dead nodes remove also all the engines and processes mappings.!
-class IgniteRepository(
+class IgniteWorkflowEngineRepository(
     processesCacheName: String,
     finishedProcessesCacheName: String,
     nodesCacheName: String,
     waitProcessesQueueName: String,
     ignite: Ignite
-) : Repository {
+) : WorkflowEngineRepository {
 
     private val transactions = ignite.transactions()
     private val processesCache = ignite.getOrCreateCache<ProcessId, FlowContext<Any>>(

@@ -6,31 +6,31 @@ import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.core.spi.cluster.NodeListener
 
 
-class NodeSynchronizationService(private val repository: Repository) {
-    class HealthCheck(private val repository: Repository) : NodeListener {
+class NodeSynchronizationService(private val workflowEngineRepository: WorkflowEngineRepository) {
+    class HealthCheck(private val workflowEngineRepository: WorkflowEngineRepository) : NodeListener {
 
         override fun nodeAdded(nodeID: String?) {
             println("node added $nodeID")
         }
 
         override fun nodeLeft(nodeID: String) {
-            repository.moveDeadNodeProcessesToWaitQueueAndCleanup(NodeId(nodeID))
+            workflowEngineRepository.moveDeadNodeProcessesToWaitQueueAndCleanup(NodeId(nodeID))
         }
     }
 
     fun subscribeNodeExistence(clusterManager: ClusterManager) {
-        clusterManager.nodeListener(HealthCheck(repository))
+        clusterManager.nodeListener(HealthCheck(workflowEngineRepository))
     }
 
     fun listenToWaitingProcesses(vertx: Vertx, engineService: EngineService, nodeId: NodeId) {
         vertx.setTimer(10_000) {
             vertx.executeBlocking<Void>(
                 { promise ->
-                    repository.getAndExecuteWaitingProcess {
+                    workflowEngineRepository.getAndExecuteWaitingProcess {
                         engineService.startProcess(it.workflowName, "", it.processId)
-                            .compose { Future.succeededFuture<Void>() }
+                            .compose { Future.succeededFuture() }
                     }
-                        .setHandler(promise::handle)
+                        .onComplete(promise::handle)
                 },
                 true
             )

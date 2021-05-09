@@ -1,12 +1,12 @@
 package process
 
-import io.vertx.core.Future
+import process.engine.LongWorkflow
 import process.engine.Step
 import process.engine.StepName
-import process.engine.Workflow
+import io.vertx.core.Future
 
-fun simpleWorkflow(): Workflow<String> {
-    return Workflow(
+fun simpleWorkflow(): LongWorkflow<String> {
+    return LongWorkflow(
         name = "SimpleWorkflow",
         startNode = StepName("start"),
         steps = buildSteps().associateBy({ it.name }, { it }),

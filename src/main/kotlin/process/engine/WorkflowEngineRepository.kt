@@ -4,7 +4,7 @@ import io.vertx.core.Future
 import io.vertx.core.Vertx
 
 
-interface Repository {
+interface WorkflowEngineRepository {
     fun init(vertx: Vertx, nodeId: NodeId): Future<Void>
     fun <T> saveProcess(flowContext: FlowContext<T>): Future<Void>
     fun <T> finishProcess(flowContext: FlowContext<T>): Future<Void>

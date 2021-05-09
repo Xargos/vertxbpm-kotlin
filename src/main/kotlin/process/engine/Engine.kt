@@ -7,29 +7,53 @@ import java.io.Serializable
 data class ProcessId(val value: String) : Serializable
 
 class Engine(
-    private val repository: Repository
+    private val workflowEngineRepository: WorkflowEngineRepository
 ) {
 
-    fun <T> start(
-        workflow: Workflow<T>,
-        inputData: T,
+    fun <CONTEXT, OUTPUT> startInstant(
+        workflow: InstantWorkflow<CONTEXT, OUTPUT>,
+        inputData: CONTEXT,
         processId: ProcessId
-    ): Future<Void> {
+    ): Future<OUTPUT> {
         val promise = promise<Void>()
         val firstStep = StepContext(workflow.startNode, inputData)
         val flowContext = FlowContext(workflow.name, processId, firstStep, listOf(firstStep))
-        repository.startNewProcess(processId)
-            .compose { repository.getOrCreateProcess(flowContext) }
+
+        workflowEngineRepository.startNewProcess(processId)
+            .compose { workflowEngineRepository.getOrCreateProcess(flowContext) }
             .compose {
                 promise.complete()
                 this.execStep(workflow.steps, (it ?: flowContext))
             }
             .onFailure {
                 it.printStackTrace()
-                repository.finishProcess(flowContext.copy(ended = true, exception = it))
+                workflowEngineRepository.finishProcess(flowContext.copy(ended = true, exception = it))
                 promise.tryFail(it)
             }
-            .onComplete { repository.removeProcessFromEngine(processId) }
+            .onComplete { workflowEngineRepository.removeProcessFromEngine(processId) }
+        return promise.future().compose { workflow.output.future() }
+    }
+
+    fun <T> start(
+        workflow: LongWorkflow<T>,
+        inputData: T,
+        processId: ProcessId
+    ): Future<Void> {
+        val promise = promise<Void>()
+        val firstStep = StepContext(workflow.startNode, inputData)
+        val flowContext = FlowContext(workflow.name, processId, firstStep, listOf(firstStep))
+        workflowEngineRepository.startNewProcess(processId)
+            .compose { workflowEngineRepository.getOrCreateProcess(flowContext) }
+            .compose {
+                promise.complete()
+                this.execStep(workflow.steps, (it ?: flowContext))
+            }
+            .onFailure {
+                it.printStackTrace()
+                workflowEngineRepository.finishProcess(flowContext.copy(ended = true, exception = it))
+                promise.tryFail(it)
+            }
+            .onComplete { workflowEngineRepository.removeProcessFromEngine(processId) }
         return promise.future()
     }
 
@@ -59,7 +83,7 @@ class Engine(
         return try {
             when (step) {
                 is Step.End -> {
-                    repository.finishProcess(flowContext.copy(ended = true))
+                    workflowEngineRepository.finishProcess(flowContext.copy(ended = true))
                 }
                 is Step.Standard -> {
                     standardStep(step, data, flowContext, steps)
@@ -100,7 +124,7 @@ class Engine(
                 val nextStep = StepContext(it, data)
                 val newfc =
                     flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-                repository.saveProcess(newfc)
+                workflowEngineRepository.saveProcess(newfc)
                     .compose { this.execStep(steps, newfc) }
             }
     }
@@ -113,7 +137,7 @@ class Engine(
     ): Future<Void> {
         val nextStep = StepContext(step.next, data)
         val newfc = flowContext.copy(currentStep = nextStep, history = flowContext.history.plus(nextStep))
-        return repository.saveProcess(newfc)
+        return workflowEngineRepository.saveProcess(newfc)
             .compose { this.execStep(steps, newfc) }
     }
 }

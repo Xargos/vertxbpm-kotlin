@@ -3,8 +3,7 @@ package process.verticle
 import com.beust.klaxon.Klaxon
 import io.vertx.core.Future
 import io.vertx.core.Vertx
-import io.vertx.core.eventbus.DeliveryOptions
-import io.vertx.core.http.HttpClient
+import io.vertx.ext.web.client.WebClient
 import io.vertx.junit5.Checkpoint
 import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
@@ -41,23 +40,23 @@ class HttpVerticleITest {
                 Step.Standard(StepName("step"), StepName("end")) { step(it) },
                 Step.End(StepName("end")) { step(it) })
         )
-        val workflows = mapOf(Pair(workflow.name, workflow))
+        val workflows = mapOf(workflow.name to { workflow })
 
-        startVerticle { ignite, clusterManager -> buildHttpVerticle(workflows, ignite, clusterManager) }
+        startVerticle { clusterManager -> buildHttpVerticle(clusterManager, workflows) }
             .onFailure { testContext.failNow(it) }
             .onSuccess { clusteredVertx ->
-                val httpClient = vertx.createHttpClient()
-                httpClient.post(8080, "localhost", "/workflow/${workflow.name}")
-                {
-                    if (it.statusCode() != 200) {
-                        testContext.failNow(Exception(it.statusMessage()))
-                    } else {
-                        waitForProcessToFinish(clusteredVertx, testContext, statisticsCorrect, httpClient)
-                    }
-                }
+                val webClient = WebClient.create(vertx)
+                webClient.post(8080, "localhost", "/workflow/${workflow.name}")
                     .putHeader("Content-Length", "0")
-                    .write("")
-                    .end()
+                    .send()
+                    .onSuccess {
+                        if (it.statusCode() != 200) {
+                            testContext.failNow(Exception(it.statusMessage()))
+                        } else {
+                            waitForProcessToFinish(clusteredVertx, testContext, statisticsCorrect, webClient)
+                        }
+                    }
+                    .onFailure { testContext.failNow(it) }
             }
     }
 
@@ -70,24 +69,23 @@ class HttpVerticleITest {
         vertx: Vertx,
         testContext: VertxTestContext,
         statisticsCorrect: Checkpoint,
-        httpClient: HttpClient
+        webClient: WebClient
     ) {
         vertx.setTimer(1000) {
-            httpClient.get(8080, "localhost", "/statistics/")
-            {
-                if (it.statusCode() != 200) {
-                    testContext.failNow(Exception(it.statusMessage()))
-                } else {
-                    it.bodyHandler { buffer ->
-                        val statistics = Klaxon().parse<Statistics>(buffer.toString())
+            webClient.get(8080, "localhost", "/statistics/")
+                .send()
+                .onSuccess {
+                    if (it.statusCode() != 200) {
+                        testContext.failNow(Exception(it.statusMessage()))
+                    } else {
+                        val statistics = Klaxon().parse<Statistics>(it.bodyAsString())
                         assertThat(statistics?.activeProcessCount).isEqualTo(0)
                         assertThat(statistics?.processCount).isEqualTo(1)
                         assertThat(statistics?.finishedProcessesCount).isEqualTo(1)
                         statisticsCorrect.flag()
                     }
                 }
-            }
-                .end()
+                .onFailure { testContext.failNow(it) }
         }
     }
 }

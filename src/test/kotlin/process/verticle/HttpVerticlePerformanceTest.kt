@@ -3,11 +3,11 @@ package process.verticle
 import com.beust.klaxon.Klaxon
 import io.vertx.core.CompositeFuture
 import io.vertx.core.Future
-import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.eventbus.DeliveryOptions
-import io.vertx.core.http.HttpClient
+import io.vertx.ext.web.client.WebClient
 import io.vertx.junit5.Checkpoint
+import io.vertx.junit5.Timeout
 import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
 import org.apache.ignite.Ignition
@@ -21,12 +21,14 @@ import process.engine.StepName
 import process.startVerticle
 import process.testWorkflow
 import process.verticles.buildHttpVerticle
+import java.util.concurrent.TimeUnit
 
 @ExtendWith(VertxExtension::class)
 class HttpVerticlePerformanceTest {
 
     @Test
-    fun `Given http verticle when 5000 dispatched processes then engine should execute them all 1 second after last one is dispatched`(
+    @Timeout(value = 2, timeUnit = TimeUnit.MINUTES)
+    fun `Given http verticle when 1000 dispatched processes then engine should execute them all 1 second after last one is dispatched`(
         vertx: Vertx,
         testContext: VertxTestContext
     ) {
@@ -37,16 +39,16 @@ class HttpVerticlePerformanceTest {
             startNode = singleStep.name,
             steps = listOf(singleStep)
         )
-        val workflows = mapOf(Pair(workflow.name, workflow))
+        val workflows = mapOf(workflow.name to { workflow })
         val deliveryOptions = DeliveryOptions()
         deliveryOptions.addHeader("workflowName", workflow.name)
-        val numberOfProcesses = 5000
+        val numberOfProcesses = 1000
 
-        startVerticle { ignite, clusterManager -> buildHttpVerticle(workflows, ignite, clusterManager) }
+        startVerticle { clusterManager -> buildHttpVerticle(clusterManager, workflows) }
             .onFailure { testContext.failNow(it) }
             .onSuccess { clusteredVertx ->
-                val httpClient = vertx.createHttpClient()
-                CompositeFuture.join((1..numberOfProcesses).map { dispatchProcesses(httpClient, workflow.name) })
+                val webClient = WebClient.create(vertx)
+                CompositeFuture.join((1..numberOfProcesses).map { dispatchProcesses(webClient, workflow.name) })
                     .onFailure { testContext.failNow(it) }
                     .onSuccess {
                         waitForProcessToFinish(
@@ -54,7 +56,7 @@ class HttpVerticlePerformanceTest {
                             testContext,
                             statisticsCorrect,
                             numberOfProcesses,
-                            httpClient
+                            webClient
                         )
                     }
             }
@@ -66,22 +68,18 @@ class HttpVerticlePerformanceTest {
     }
 
     private fun dispatchProcesses(
-        httpClient: HttpClient,
+        webClient: WebClient,
         workflowName: String
     ): Future<Void> {
-        val promise = Promise.promise<Void>()
-        httpClient.post(8080, "localhost", "/workflow/${workflowName}")
-        {
-            if (it.statusCode() != 200) {
-                promise.fail(Exception(it.statusMessage()))
-            } else {
-                promise.complete()
-            }
-        }
+        return webClient.post(8080, "localhost", "/workflow/${workflowName}")
             .putHeader("Content-Length", "0")
-            .write("")
-            .end()
-        return promise.future()
+            .send()
+            .map {
+                if (it.statusCode() != 200) {
+                    Exception(it.statusMessage())
+                }
+                null
+            }
     }
 
     private fun waitForProcessToFinish(
@@ -89,16 +87,16 @@ class HttpVerticlePerformanceTest {
         testContext: VertxTestContext,
         statisticsCorrect: Checkpoint,
         numberOfProcesses: Int,
-        httpClient: HttpClient
+        webClient: WebClient
     ) {
         vertx.setTimer(1000) {
-            httpClient.get(8080, "localhost", "/statistics/")
-            {
-                if (it.statusCode() != 200) {
-                    testContext.failNow(Exception(it.statusMessage()))
-                } else {
-                    it.bodyHandler { buffer ->
-                        val statistics = Klaxon().parse<Statistics>(buffer.toString())
+            webClient.get(8080, "localhost", "/statistics/")
+                .send()
+                .onSuccess {
+                    if (it.statusCode() != 200) {
+                        testContext.failNow(Exception(it.statusMessage()))
+                    } else {
+                        val statistics = Klaxon().parse<Statistics>(it.bodyAsString())
                         assertThat(statistics?.activeProcessCount).isEqualTo(0)
                         assertThat(statistics?.processCount).isEqualTo(numberOfProcesses)
                         assertThat(statistics?.finishedProcessesCount).isEqualTo(numberOfProcesses)
@@ -107,8 +105,7 @@ class HttpVerticlePerformanceTest {
                         statisticsCorrect.flag()
                     }
                 }
-            }
-                .end()
+                .onFailure { testContext.failNow(it) }
         }
     }
 }

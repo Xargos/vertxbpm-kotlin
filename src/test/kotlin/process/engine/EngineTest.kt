@@ -145,8 +145,8 @@ class EngineTest {
             .onFailure { testContext.failNow(it) }
     }
 
-    private fun <T> testRepository(processCompleted: Checkpoint): Repository {
-        val repository = mockk<Repository>()
+    private fun <T> testRepository(processCompleted: Checkpoint): WorkflowEngineRepository {
+        val repository = mockk<WorkflowEngineRepository>()
         every { repository.startNewProcess(processId) } returns Future.succeededFuture()
         val slot = slot<FlowContext<T>>()
         every { repository.getOrCreateProcess(flowContext = capture(slot)) } answers { Future.succeededFuture(slot.captured) }
@@ -156,7 +156,7 @@ class EngineTest {
         return repository
     }
 
-    private fun singleStepWorkflow(step: (data: String) -> Future<String>): Workflow<Any> {
+    private fun singleStepWorkflow(step: (data: String) -> Future<String>): LongWorkflow<Any> {
         val singleStep = Step.End<String>(StepName("start")) { step(it) }
         return testWorkflow(
             startNode = singleStep.name,

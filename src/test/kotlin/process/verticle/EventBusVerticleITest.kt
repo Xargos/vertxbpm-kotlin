@@ -24,7 +24,6 @@ class EventBusVerticleITest {
 
     @Test
     fun `Given event bus verticle engine when sent workflow then execute it`(
-        vertx: Vertx,
         testContext: VertxTestContext
     ) {
         val stepsExecuted = testContext.checkpoint(3)
@@ -40,11 +39,11 @@ class EventBusVerticleITest {
                 Step.Standard(StepName("step"), StepName("end")) { step(it) },
                 Step.End(StepName("end")) { step(it) })
         )
-        val workflows = mapOf(Pair(workflow.name, workflow))
+        val workflows = mapOf(workflow.name to { workflow })
         val deliveryOptions = DeliveryOptions()
         deliveryOptions.addHeader("workflowName", workflow.name)
 
-        startVerticle { ignite, clusterManager -> buildEventBusVerticle(workflows, ignite, clusterManager)}
+        startVerticle { clusterManager -> buildEventBusVerticle(clusterManager, workflows) }
             .onFailure { testContext.failNow(it) }
             .onSuccess { clusteredVertx ->
                 clusteredVertx.eventBus().request<String>("start_process", "", deliveryOptions) {

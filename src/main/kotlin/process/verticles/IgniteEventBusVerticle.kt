@@ -1,14 +1,17 @@
 package process.verticles
 
+import process.engine.InstantWorkflow
+import process.engine.LongWorkflow
 import de.huxhorn.sulky.ulid.ULID
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.Json
 import io.vertx.core.spi.cluster.ClusterManager
+import io.vertx.spi.cluster.ignite.IgniteClusterManager
 import org.apache.ignite.Ignite
 import process.engine.*
-import process.infrastructure.IgniteRepository
+import process.infrastructure.IgniteWorkflowEngineRepository
 import java.io.Serializable
 
 data class EventBusConfig(
@@ -17,26 +20,29 @@ data class EventBusConfig(
 ) : Serializable
 
 fun buildEventBusVerticle(
-    workflows: Map<String, Workflow<Any>>,
-    ignite: Ignite,
-    clusterManager: ClusterManager
+    clusterManager: IgniteClusterManager,
+    longWorkflows: Map<String, () -> LongWorkflow<Any>> = mapOf(),
+    instantWorkflows: Map<String, () -> InstantWorkflow<Any, Any>> = mapOf()
 ): EventBusVerticle {
     val ulid = ULID()
-    val igniteRepository = IgniteRepository(
+    val igniteRepository = IgniteWorkflowEngineRepository(
         waitProcessesQueueName = "waitProcessesQueue",
         finishedProcessesCacheName = "finishedProcesses",
         processesCacheName = "processes",
         nodesCacheName = "nodes",
-        ignite = ignite
+        ignite = clusterManager.igniteInstance
     )
     val processQueryService = ProcessQueryService(igniteRepository)
     val nodeSynchronizationService = NodeSynchronizationService(igniteRepository)
     val engineService = EngineService(
         engine = Engine(igniteRepository),
         nodeSynchronizationService = nodeSynchronizationService,
-        workflowStore = WorkflowStore(workflows),
+        workflowStore = WorkflowStore(
+            instantWorkflows = instantWorkflows,
+            longWorkflows = longWorkflows
+        ),
         ulid = ulid,
-        repository = igniteRepository,
+        workflowEngineRepository = igniteRepository,
         clusterManager = clusterManager
     )
     val eventBusConfig = EventBusConfig("start_process", "statistics")

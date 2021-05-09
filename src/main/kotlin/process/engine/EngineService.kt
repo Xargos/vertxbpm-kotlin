@@ -14,15 +14,28 @@ class EngineService(
     private val workflowStore: WorkflowStore,
     private val nodeSynchronizationService: NodeSynchronizationService,
     private val ulid: ULID,
-    private val repository: Repository,
+    private val workflowEngineRepository: WorkflowEngineRepository,
     private val clusterManager: ClusterManager
 ) {
 
     fun start(vertx: Vertx) {
-        val nodeId = NodeId(clusterManager.nodeID)
-        repository.init(vertx, nodeId)
+        val nodeId = NodeId(clusterManager.nodeId)
+        workflowEngineRepository.init(vertx, nodeId)
         nodeSynchronizationService.subscribeNodeExistence(clusterManager)
         nodeSynchronizationService.listenToWaitingProcesses(vertx, this, nodeId)
+    }
+
+    fun startInstantProcess(
+        workflowName: String,
+        body: String,
+        processId: ProcessId = ProcessId(ulid.nextULID())
+    ): Future<Any> {
+        val workflowFactory =
+            (workflowStore.instantWorkflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName"))
+        val workflow = workflowFactory()
+        val data = workflow.decodeData(body)
+        return engine.startInstant(workflow, data, processId)
+            .compose { Future.succeededFuture(it) }
     }
 
     fun startProcess(
@@ -30,8 +43,9 @@ class EngineService(
         body: String,
         processId: ProcessId = ProcessId(ulid.nextULID())
     ): Future<ProcessId> {
-        val workflow =
-            workflowStore.workflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName")
+        val workflowFactory =
+            (workflowStore.longWorkflows[workflowName] ?: throw RuntimeException("Unknown workflow: $workflowName"))
+        val workflow = workflowFactory()
         val data = workflow.decodeData(body)
         return engine.start(workflow, data, processId)
             .compose { Future.succeededFuture(processId) }

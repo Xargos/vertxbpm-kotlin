@@ -1,18 +1,16 @@
 package process
 
 import io.vertx.core.*
-import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.spi.cluster.ignite.IgniteClusterManager
-import org.apache.ignite.Ignite
 import org.apache.ignite.Ignition
 import org.apache.ignite.configuration.IgniteConfiguration
+import process.engine.LongWorkflow
 import process.engine.Step
 import process.engine.StepName
-import process.engine.Workflow
 
 
-fun testWorkflow(startNode: StepName, steps: List<Step<String>>): Workflow<Any> {
-    return Workflow(
+fun testWorkflow(startNode: StepName, steps: List<Step<String>>): LongWorkflow<Any> {
+    return LongWorkflow(
         name = "SimpleWorkflow",
         startNode = startNode,
         steps = steps.associateBy({ it.name }, { it as Step<Any> }),
@@ -20,19 +18,19 @@ fun testWorkflow(startNode: StepName, steps: List<Step<String>>): Workflow<Any> 
 }
 
 fun startVerticle(
-    verticle: (Ignite, ClusterManager) -> AbstractVerticle
+    verticle: (IgniteClusterManager) -> AbstractVerticle
 ): Future<Vertx> {
     val verticleStarted = Promise.promise<Vertx>()
     Ignition.start(IgniteConfiguration())
     val ignite = Ignition.ignite()
-    val clusterManager: ClusterManager = IgniteClusterManager(ignite)
+    val clusterManager = IgniteClusterManager(ignite)
     val options = VertxOptions()
         .setClusterManager(clusterManager)
     Vertx.clusteredVertx(options) { res: AsyncResult<Vertx?> ->
         if (res.succeeded()) {
             val vertx = res.result();
 
-            vertx?.deployVerticle(verticle(ignite, clusterManager)) {
+            vertx?.deployVerticle(verticle(clusterManager)) {
                 if (it.failed()) {
                     verticleStarted.fail(it.cause())
                 } else {

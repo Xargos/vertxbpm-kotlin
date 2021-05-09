@@ -41,10 +41,10 @@ class EngineServiceTest {
         )
         val engineService = EngineService(
             engine = Engine(repository),
-            workflowStore = WorkflowStore(mapOf(Pair(workflow.name, workflow))),
+            workflowStore = WorkflowStore(longWorkflows = mapOf(workflow.name to { workflow })),
             nodeSynchronizationService = NodeSynchronizationService(repository),
             ulid = ULID(),
-            repository = repository,
+            workflowEngineRepository = repository,
             clusterManager = clusterManager()
         )
         engineService.start(vertx)
@@ -58,13 +58,17 @@ class EngineServiceTest {
 
     private fun clusterManager(): ClusterManager {
         val clusterManager = mockk<ClusterManager>()
-        every { clusterManager.nodeID } returns "NodeId"
+        every { clusterManager.nodeId } returns "NodeId"
         every { clusterManager.nodeListener(any()) } answers {}
         return clusterManager
     }
 
-    private fun <T> testRepository(vertx: Vertx, nodeId: NodeId, processCompleted: Checkpoint): Repository {
-        val repository = mockk<Repository>()
+    private fun <T> testRepository(
+        vertx: Vertx,
+        nodeId: NodeId,
+        processCompleted: Checkpoint
+    ): WorkflowEngineRepository {
+        val repository = mockk<WorkflowEngineRepository>()
         every { repository.init(vertx, nodeId) } returns Future.succeededFuture()
         every { repository.startNewProcess(any()) } returns Future.succeededFuture()
         val slot = slot<FlowContext<T>>()

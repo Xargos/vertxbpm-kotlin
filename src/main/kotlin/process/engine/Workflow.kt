@@ -1,6 +1,7 @@
 package process.engine
 
 import io.vertx.core.Future
+import io.vertx.core.Promise
 import java.io.Serializable
 
 data class StepContext<T>(val stepName: StepName, val data: T) : Serializable
@@ -16,11 +17,19 @@ data class FlowContext<T>(
 
 data class StepName(val name: String) : Serializable
 
-data class Workflow<T>(
+data class InstantWorkflow<CONTEXT, OUTPUT>(
     val name: String,
-    val startNode: StepName,
-    val steps: Map<StepName, Step<T>>,
-    val decodeData: (data: String?) -> T
+    val startNode: StepName = StepName("start"),
+    val steps: Map<StepName, Step<CONTEXT>>,
+    val decodeData: (data: String?) -> CONTEXT,
+    val output: Promise<OUTPUT>
+) : Serializable
+
+data class LongWorkflow<CONTEXT>(
+    val name: String,
+    val startNode: StepName = StepName("start"),
+    val steps: Map<StepName, Step<CONTEXT>>,
+    val decodeData: (data: String?) -> CONTEXT
 ) : Serializable
 
 sealed class Step<T> {
@@ -29,7 +38,7 @@ sealed class Step<T> {
 
     class Standard<T>(
         override val name: StepName,
-        val next: StepName,
+        val next: StepName = StepName("end"),
         override val exec: (data: T) -> Future<T>
     ) : Step<T>()
 
